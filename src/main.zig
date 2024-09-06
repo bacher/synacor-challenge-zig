@@ -17,8 +17,31 @@ pub fn main() !void {
     }
     const allocator = gpa.allocator();
 
-    // const buffer = try allocator.alloc(u8, binarySize);
-    const buffer = try allocator.alignedAlloc(u8, 2, binarySize);
+    const buf103 = try allocator.alloc(u8, 103);
+    defer {
+        allocator.free(buf103);
+    }
+
+    std.debug.print("buf103        addr: {d}\n", .{@intFromPtr(&buf103)});
+    std.debug.print("buf103[0]     addr: {d}\n", .{@intFromPtr(&buf103[0])});
+
+    const buffer_aligned1: []align(4096) u8 = @alignCast(buf103);
+    std.debug.print("buf103_a      type: {}\n", .{@TypeOf(buffer_aligned1)});
+    std.debug.print("buf103_a      addr: {d}\n", .{@intFromPtr(&buffer_aligned1)});
+    std.debug.print("buf103_a[0]   addr: {d}\n", .{@intFromPtr(&buffer_aligned1[0])});
+
+    const buf102 = buf103[1..];
+
+    std.debug.print("buf102        addr: {d}\n", .{@intFromPtr(&buf102)});
+    std.debug.print("buf102[0]     addr: {d}\n", .{@intFromPtr(&buf102[0])});
+
+    // const buffer_aligned2: []align(256) u8 = @alignCast(buf102);
+    // std.debug.print("buf102_a      type: {}\n", .{@TypeOf(buffer_aligned2)});
+    // std.debug.print("buf102_a      addr: {d}\n", .{@intFromPtr(&buffer_aligned2)});
+    // std.debug.print("buf102_a[0]   addr: {d}\n", .{@intFromPtr(&buffer_aligned2[0])});
+
+    const buffer = try allocator.alloc(u8, binarySize);
+    // const buffer = try allocator.alignedAlloc(u8, 2, binarySize);
     defer {
         allocator.free(buffer);
     }
@@ -28,11 +51,11 @@ pub fn main() !void {
 
     // Buffer should be asserted with align by @alignCast or initially
     // created with proper alignment by calling alignedAlloc().
-    // const buffer_aligned: []align(2) u8 = @alignCast(buffer);
-    // const buffer_u16: [*]u16 = @ptrCast(buffer_aligned);
+    const buffer_aligned: []align(2048) u8 = @alignCast(buffer);
+    const buffer_u16: [*]u16 = @ptrCast(buffer_aligned);
 
     // Using regular @ptrCast, but alignedAlloc() is required.
-    const buffer_u16: [*]u16 = @ptrCast(buffer);
+    // const buffer_u16: [*]u16 = @ptrCast(buffer);
 
     // Casting of pointers also works, but it produces slice with
     // invalid .len field.
@@ -40,8 +63,8 @@ pub fn main() !void {
 
     std.debug.print("buffer8       addr: {d}\n", .{@intFromPtr(&buffer)});
     std.debug.print("buffer8[0]    addr: {d}\n", .{@intFromPtr(&buffer[0])});
-    // std.debug.print("buffer8(a)    addr: {d}\n", .{@intFromPtr(&buffer_aligned)});
-    // std.debug.print("buffer8(a)[0] addr: {d}\n", .{@intFromPtr(&buffer_aligned[0])});
+    std.debug.print("buffer8(a)    addr: {d}\n", .{@intFromPtr(&buffer_aligned)});
+    std.debug.print("buffer8(a)[0] addr: {d}\n", .{@intFromPtr(&buffer_aligned[0])});
     std.debug.print("buffer16      addr: {d}\n", .{@intFromPtr(buffer_u16)});
     std.debug.print("buffer16[0]   addr: {d}\n", .{@intFromPtr(&buffer_u16[0])});
 
