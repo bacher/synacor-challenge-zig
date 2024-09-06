@@ -4,29 +4,47 @@ const CHALLENGE_BIN_SIZE = 60100;
 const wordType = u16;
 
 pub fn main() !void {
-    const file = std.fs.cwd().openFile("./challenge/challenge.bin", .{}) catch {
-        return error.LOL;
-    };
+    const file = try std.fs.cwd().openFile("./challenge/challenge.bin", .{});
 
     const stat = try file.stat();
     const binarySize = stat.size;
 
     std.debug.print("stat.size: {}\n", .{binarySize});
 
-    var buffer: [CHALLENGE_BIN_SIZE / @sizeOf(wordType)]wordType = undefined;
-    const u8buffer: *[CHALLENGE_BIN_SIZE]u8 = @ptrCast(&buffer);
-    const bytes_read = file.readAll(u8buffer) catch |err| {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer {
+        _ = gpa.deinit();
+    }
+    const allocator = gpa.allocator();
+
+    var buffer = try allocator.alloc(wordType, binarySize / @sizeOf(wordType));
+    defer {
+        allocator.free(buffer);
+    }
+
+    // var buffer: []wordType = undefined;
+    // const u8buffer: *[CHALLENGE_BIN_SIZE]u8 = @ptrCast(&buffer);
+
+    const buffer_u8: *[]u8 = @ptrCast(&buffer);
+
+    std.debug.print("buffer16 addr: {d}\n", .{@intFromPtr(&buffer)});
+    std.debug.print("buffer8  addr: {d}\n", .{@intFromPtr(buffer_u8)});
+
+    std.debug.print("buffer_u8  {}  .len = {}\n", .{ @TypeOf(buffer_u8.*), buffer_u8.*.len });
+    std.debug.print("buffer_u16 {} .len = {}\n", .{ @TypeOf(buffer), buffer.len });
+
+    const bytes_read = file.readAll(buffer_u8.*) catch |err| {
         std.debug.print("can't read the file: {!}", .{err});
         return;
     };
 
     std.debug.print("bytes_read: {}\n", .{bytes_read});
-    std.debug.print("@sizeOf(u16): {}\n", .{@sizeOf(u16)});
 
-    std.debug.print("buffer[0]: {}\n", .{buffer[0]});
-    std.debug.print("buffer[1]: {}\n", .{buffer[1]});
-    std.debug.print("buffer[2]: {}\n", .{buffer[2]});
-    std.debug.print("buffer[3]: {}\n", .{buffer[3]});
+    // const bufferu16: [*]u16 = @ptrCast(buffer);
+    std.debug.print("buffer[0-3]  : {any}\n", .{buffer[0..4]});
+    std.debug.print("buffer[4-7]  : {any}\n", .{buffer[4..8]});
+    std.debug.print("buffer[8-11] : {any}\n", .{buffer[8..12]});
+    std.debug.print("buffer[12-15]: {any}\n", .{buffer[12..16]});
 
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     // std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
