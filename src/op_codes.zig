@@ -53,7 +53,7 @@ pub fn getOpCodeArgsLength(opCode: OpCode) u16 {
         OpCode.NOT => 2,
         OpCode.READ_MEM => 2,
         OpCode.WRITE_MEM => 2,
-        OpCode.CALL => 2,
+        OpCode.CALL => 1,
         OpCode.RET => 1,
         OpCode.OUT => 1,
         OpCode.IN => 1,

@@ -28,16 +28,20 @@ const BinaryAccessor = struct {
 pub const Vm = struct {
     allocator: std.mem.Allocator,
     binary_accessor: BinaryAccessor,
-    registers: [8]u16,
+    // registers: [8]u16,
+    // registers: [8]u16 = undefined,
+    registers: [8]u16 = .{0} ** 8,
     stack: std.ArrayList(u16),
+    memory: [MEMORY_SIZE]u16 = std.mem.zeroes([MEMORY_SIZE]u16),
     pc: u16 = 0,
 
     pub fn initVm(allocator: std.mem.Allocator, binary_data: ChallengeData) Vm {
         return .{
             .allocator = allocator,
             .binary_accessor = BinaryAccessor{ .data = binary_data },
-            .registers = [_]u16{0} ** 8,
+            // .registers = [_]u16{0} ** 8,
             .stack = std.ArrayList(u16).init(allocator),
+            // .memory = std.mem.zeroes([MEMORY_SIZE]u16),
         };
     }
 
@@ -109,13 +113,51 @@ pub const Vm = struct {
                     const register = try read_register_id(try self.binary_accessor.getCell(self.pc));
                     const a = try read_value_at(self.binary_accessor, &self.registers, self.pc + 1);
                     const b = try read_value_at(self.binary_accessor, &self.registers, self.pc + 2);
-                    put_value_into_register(&self.registers, register, (a + b) % NUMBER_CAP);
+                    put_value_into_register(&self.registers, register, (a +% b) % NUMBER_CAP);
+                },
+                // mult: 10 a b c
+                //   store into <a> the product of <b> and <c> (modulo 32768)
+                OpCode.MULT => {
+                    const register = try read_register_id(try self.binary_accessor.getCell(self.pc));
+                    const a = try read_value_at(self.binary_accessor, &self.registers, self.pc + 1);
+                    const b = try read_value_at(self.binary_accessor, &self.registers, self.pc + 2);
+                    put_value_into_register(&self.registers, register, (a *% b) % NUMBER_CAP);
+                },
+                // mod: 11 a b c
+                //   store into <a> the remainder of <b> divided by <c>
+                OpCode.MOD => {
+                    const register = try read_register_id(try self.binary_accessor.getCell(self.pc));
+                    const a = try read_value_at(self.binary_accessor, &self.registers, self.pc + 1);
+                    const b = try read_value_at(self.binary_accessor, &self.registers, self.pc + 2);
+                    put_value_into_register(&self.registers, register, a % b);
                 },
                 OpCode.AND => {
                     const register = try read_register_id(try self.binary_accessor.getCell(self.pc));
                     const a = try read_value_at(self.binary_accessor, &self.registers, self.pc + 1);
                     const b = try read_value_at(self.binary_accessor, &self.registers, self.pc + 2);
                     put_value_into_register(&self.registers, register, (a & b) % NUMBER_CAP);
+                },
+                // or: 13 a b c
+                //   stores into <a> the bitwise or of <b> and <c>
+                OpCode.OR => {
+                    const register = try read_register_id(try self.binary_accessor.getCell(self.pc));
+                    const a = try read_value_at(self.binary_accessor, &self.registers, self.pc + 1);
+                    const b = try read_value_at(self.binary_accessor, &self.registers, self.pc + 2);
+                    put_value_into_register(&self.registers, register, (a | b) % NUMBER_CAP);
+                },
+                // not: 14 a b
+                //   stores 15-bit bitwise inverse of <b> in <a>
+                OpCode.NOT => {
+                    const register = try read_register_id(try self.binary_accessor.getCell(self.pc));
+                    const a = try read_value_at(self.binary_accessor, &self.registers, self.pc + 1);
+                    put_value_into_register(&self.registers, register, (~a) % NUMBER_CAP);
+                },
+                // call: 17 a
+                //   write the address of the next instruction to the stack and jump to <a>
+                OpCode.CALL => {
+                    const a = try read_value_at(self.binary_accessor, &self.registers, self.pc);
+                    try self.stack.append(self.pc + 1);
+                    jump_to = a;
                 },
                 OpCode.OUT => {
                     const output_char: u8 = @truncate(try read_value_at(self.binary_accessor, &self.registers, self.pc));
@@ -138,18 +180,6 @@ pub const Vm = struct {
         }
     }
 };
-
-// pub fn run(allocator: std.mem.Allocator, binary_data: ChallengeData) !void {
-// const binary_accessor: BinaryAccessor = .{ .data = binary_data };
-//
-// var pc: u16 = 0;
-// var reg_state_buffer = [_]u16{ 0, 0, 0, 0, 0, 0, 0, 0 };
-// var reg_state = &reg_state_buffer;
-// reg_state[0] = 0;
-// // var memory = std.mem.zeroes([MEMORY_SIZE]u16);
-// var stack = std.ArrayList(u16).init(allocator);
-// defer stack.deinit();
-// }
 
 fn read_value_at(binary_accessor: BinaryAccessor, reg_state: *RegState, pc: u16) !u16 {
     return read_value(reg_state, try binary_accessor.getCell(pc));
