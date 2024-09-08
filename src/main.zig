@@ -1,7 +1,10 @@
 const std = @import("std");
 const opCodes = @import("./op_codes.zig");
+const ChallengeLoaderModule = @import("./challenge_loader.zig");
 
 const OpCode = opCodes.OpCode;
+const ChallengeLoader = ChallengeLoaderModule.ChallengeLoader;
+const ChallengeData = ChallengeLoaderModule.ChallengeData;
 
 const NUMBER_CAP = std.math.pow(u16, 2, 15);
 const REGISTER_START = NUMBER_CAP;
@@ -11,6 +14,17 @@ const MEMORY_SIZE = std.math.pow(u16, 2, 15);
 const WordType = u16;
 const RegState = [REGISTERS_COUNT]WordType;
 
+const BinaryAccessor = struct {
+    data: ChallengeData,
+
+    pub fn getCell(self: *const BinaryAccessor, address: u16) !u16 {
+        if (address < self.data.size) {
+            return self.data.buffer[address];
+        }
+        return error.InvalidBinaryAccess;
+    }
+};
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
@@ -18,43 +32,16 @@ pub fn main() !void {
     }
     const allocator = gpa.allocator();
 
-    const buffer = try get_binary(allocator);
-    defer {
-        allocator.free(buffer);
-    }
+    var loader: ChallengeLoader = .{};
+    try loader.init(allocator);
+    defer loader.deinit();
 
-    const buffer_u16: [*]u16 = @ptrCast(buffer);
-
-    try run(allocator, buffer_u16);
+    try run(allocator, try loader.getBinary());
 }
 
-fn get_binary(allocator: std.mem.Allocator) ![]align(2) u8 {
-    var is_success = false;
+fn run(allocator: std.mem.Allocator, binaryData: ChallengeData) !void {
+    const binary_accessor: BinaryAccessor = .{ .data = binaryData };
 
-    const file = try std.fs.cwd().openFile("./challenge/challenge.bin", .{});
-
-    const stat = try file.stat();
-    const binarySize = stat.size;
-
-    const buffer = try allocator.alignedAlloc(u8, 2, binarySize);
-    defer {
-        if (!is_success) {
-            allocator.free(buffer);
-        }
-    }
-
-    const bytes_read = file.readAll(buffer) catch |err| {
-        std.debug.print("can't read the file: {!}", .{err});
-        return err;
-    };
-
-    try std.testing.expect(bytes_read == binarySize);
-
-    is_success = true;
-    return buffer;
-}
-
-fn run(allocator: std.mem.Allocator, binary: [*]u16) !void {
     var pc: u16 = 0;
     var reg_state_buffer = ([_]u16{ 0, 0, 0, 0, 0, 0, 0, 0 });
     var reg_state = &reg_state_buffer;
@@ -64,7 +51,7 @@ fn run(allocator: std.mem.Allocator, binary: [*]u16) !void {
     defer stack.deinit();
 
     while (true) {
-        const op = binary[pc];
+        const op = try binary_accessor.getCell(pc);
         pc += 1;
 
         // std.debug.print("op code {d}\n", .{op});
@@ -78,16 +65,16 @@ fn run(allocator: std.mem.Allocator, binary: [*]u16) !void {
                 return;
             },
             OpCode.SET => {
-                const register = try read_register_id(binary[pc]);
-                const value = try read_value_at(binary, reg_state, pc + 1);
+                const register = try read_register_id(try binary_accessor.getCell(pc));
+                const value = try read_value_at(binary_accessor, reg_state, pc + 1);
                 put_value_into_register(reg_state, register, value);
             },
             OpCode.PUSH => {
-                const value = try read_value_at(binary, reg_state, pc);
+                const value = try read_value_at(binary_accessor, reg_state, pc);
                 try stack.append(value);
             },
             OpCode.POP => {
-                const register = try read_register_id(binary[pc]);
+                const register = try read_register_id(try binary_accessor.getCell(pc));
                 const optional_value = stack.popOrNull();
                 if (optional_value) |value| {
                     put_value_into_register(reg_state, register, value);
@@ -96,46 +83,46 @@ fn run(allocator: std.mem.Allocator, binary: [*]u16) !void {
                 }
             },
             OpCode.EQ => {
-                const register = try read_register_id(binary[pc]);
-                const a = try read_value_at(binary, reg_state, pc + 1);
-                const b = try read_value_at(binary, reg_state, pc + 2);
+                const register = try read_register_id(try binary_accessor.getCell(pc));
+                const a = try read_value_at(binary_accessor, reg_state, pc + 1);
+                const b = try read_value_at(binary_accessor, reg_state, pc + 2);
                 put_value_into_register(reg_state, register, if (a == b) 1 else 0);
             },
             OpCode.GT => {
-                const register = try read_register_id(binary[pc]);
-                const a = try read_value_at(binary, reg_state, pc + 1);
-                const b = try read_value_at(binary, reg_state, pc + 2);
+                const register = try read_register_id(try binary_accessor.getCell(pc));
+                const a = try read_value_at(binary_accessor, reg_state, pc + 1);
+                const b = try read_value_at(binary_accessor, reg_state, pc + 2);
                 put_value_into_register(reg_state, register, if (a > b) 1 else 0);
             },
             OpCode.JUMP => {
-                jump_to = try read_value_at(binary, reg_state, pc);
+                jump_to = try read_value_at(binary_accessor, reg_state, pc);
             },
             OpCode.JT => {
-                const value = try read_value_at(binary, reg_state, pc);
+                const value = try read_value_at(binary_accessor, reg_state, pc);
                 if (value > 0) {
-                    jump_to = try read_value_at(binary, reg_state, pc + 1);
+                    jump_to = try read_value_at(binary_accessor, reg_state, pc + 1);
                 }
             },
             OpCode.JF => {
-                const value = try read_value_at(binary, reg_state, pc);
+                const value = try read_value_at(binary_accessor, reg_state, pc);
                 if (value == 0) {
-                    jump_to = try read_value_at(binary, reg_state, pc + 1);
+                    jump_to = try read_value_at(binary_accessor, reg_state, pc + 1);
                 }
             },
             OpCode.ADD => {
-                const register = try read_register_id(binary[pc]);
-                const a = try read_value_at(binary, reg_state, pc + 1);
-                const b = try read_value_at(binary, reg_state, pc + 2);
+                const register = try read_register_id(try binary_accessor.getCell(pc));
+                const a = try read_value_at(binary_accessor, reg_state, pc + 1);
+                const b = try read_value_at(binary_accessor, reg_state, pc + 2);
                 put_value_into_register(reg_state, register, (a + b) % NUMBER_CAP);
             },
             OpCode.AND => {
-                const register = try read_register_id(binary[pc]);
-                const a = try read_value_at(binary, reg_state, pc + 1);
-                const b = try read_value_at(binary, reg_state, pc + 2);
+                const register = try read_register_id(try binary_accessor.getCell(pc));
+                const a = try read_value_at(binary_accessor, reg_state, pc + 1);
+                const b = try read_value_at(binary_accessor, reg_state, pc + 2);
                 put_value_into_register(reg_state, register, (a & b) % NUMBER_CAP);
             },
             OpCode.OUT => {
-                const output_char: u8 = @truncate(try read_value_at(binary, reg_state, pc));
+                const output_char: u8 = @truncate(try read_value_at(binary_accessor, reg_state, pc));
                 std.debug.print("{c}", .{output_char});
             },
             OpCode.NOOP => {
@@ -155,16 +142,16 @@ fn run(allocator: std.mem.Allocator, binary: [*]u16) !void {
     }
 }
 
-fn read_value_at(binary: [*]u16, reg_state: *RegState, pc: u16) !u16 {
-    return read_value(binary, reg_state, binary[pc]);
+fn read_value_at(binary_accessor: BinaryAccessor, reg_state: *RegState, pc: u16) !u16 {
+    return read_value(reg_state, try binary_accessor.getCell(pc));
 }
 
-fn read_value(binary: [*]u16, reg_state: *RegState, value: u16) !u16 {
+fn read_value(reg_state: *RegState, value: u16) !u16 {
     if (value < NUMBER_CAP) {
         return value;
     }
     if (value < REGISTER_START + REGISTERS_COUNT) {
-        return read_value(binary, reg_state, reg_state.*[value - REGISTER_START]);
+        return read_value(reg_state, reg_state.*[value - REGISTER_START]);
     }
     return error.InvalidRef;
 }
