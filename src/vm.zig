@@ -3,6 +3,7 @@ const opCodes = @import("./op_codes.zig");
 const ChallengeLoaderModule = @import("./challenge_loader.zig");
 
 const OpCode = opCodes.OpCode;
+const OpCode3 = opCodes.OpCode3;
 const ChallengeLoader = ChallengeLoaderModule.ChallengeLoader;
 const ChallengeData = ChallengeLoaderModule.ChallengeData;
 
@@ -47,6 +48,19 @@ pub const Vm = struct {
 
     pub fn deinit(vm: *Vm) void {
         defer vm.stack.deinit();
+    }
+
+    fn operand3(self: *Vm, op_code: OpCode3) !void {
+        const register = try read_register_id(try self.binary_accessor.getCell(self.pc));
+        const a = try read_value_at(self.binary_accessor, &self.registers, self.pc + 1);
+        const b = try read_value_at(self.binary_accessor, &self.registers, self.pc + 2);
+
+        const value = switch (op_code) {
+            OpCode3.ADD => (a +% b),
+            OpCode3.MULT => (a *% b),
+        };
+
+        put_value_into_register(&self.registers, register, value % NUMBER_CAP);
     }
 
     pub fn run(self: *Vm) !void {
@@ -110,10 +124,7 @@ pub const Vm = struct {
                     }
                 },
                 OpCode.ADD => {
-                    const register = try read_register_id(try self.binary_accessor.getCell(self.pc));
-                    const a = try read_value_at(self.binary_accessor, &self.registers, self.pc + 1);
-                    const b = try read_value_at(self.binary_accessor, &self.registers, self.pc + 2);
-                    put_value_into_register(&self.registers, register, (a +% b) % NUMBER_CAP);
+                    try self.operand3(OpCode3.ADD);
                 },
                 // mult: 10 a b c
                 //   store into <a> the product of <b> and <c> (modulo 32768)
