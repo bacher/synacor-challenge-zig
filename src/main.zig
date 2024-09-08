@@ -1,9 +1,9 @@
 const std = @import("std");
 const opCodes = @import("./op_codes.zig");
-const ChallengeLoaderModule = @import("./challenge_loader.zig");
-const vm = @import("./vm.zig");
+const challengeLoaderModule = @import("./challenge_loader.zig");
+const vmModule = @import("./vm.zig");
 
-const ChallengeLoader = ChallengeLoaderModule.ChallengeLoader;
+const ChallengeLoader = challengeLoaderModule.ChallengeLoader;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -16,7 +16,12 @@ pub fn main() !void {
     try loader.init(allocator);
     defer loader.deinit();
 
-    try vm.run(allocator, try loader.getBinary());
+    var vm = vmModule.Vm.initVm(allocator, try loader.getBinary());
+    defer vm.deinit();
+
+    try vm.run();
+
+    // try vmModule.run(allocator, try loader.getBinary());
 }
 
 test "simple test" {
