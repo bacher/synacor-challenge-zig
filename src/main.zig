@@ -4,6 +4,7 @@ const challengeLoaderModule = @import("./challenge_loader.zig");
 const vmModule = @import("./vm.zig");
 
 const ChallengeLoader = challengeLoaderModule.ChallengeLoader;
+// const InnerState = challengeLoaderModule.InnerState;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -12,13 +13,17 @@ pub fn main() !void {
     }
     const allocator = gpa.allocator();
 
-    // const a = ChallengeLoader{
-    //     ._inner_state = .{
-    //         .binary = @constCast(&[_]u16{0}**10),
-    //         .allocator = allocator,
-    //     },
-    // };
-    // _ = a ;
+    const a = ChallengeLoader{
+        // ._inner_state = InnerState{
+        //     .binary = @constCast(&[_]u16{0}**10),
+        //     .allocator = allocator,
+        // },
+        ._inner_state = .{
+            .binary = @constCast(&[_]u16{0}**10),
+            .allocator = allocator,
+        },
+    };
+    _ = a ;
 
     var loader = try ChallengeLoader.init(allocator);
     defer loader.deinit();
