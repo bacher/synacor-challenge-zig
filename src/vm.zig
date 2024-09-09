@@ -34,6 +34,14 @@ pub const Vm = struct {
     memory: [MEMORY_SIZE]u16 = std.mem.zeroes([MEMORY_SIZE]u16),
     pc: u16 = 0,
 
+    fn add (a: u16, b: u16) u16 {
+        return a +% b;
+    }
+
+    fn mult (a: u16, b: u16) u16 {
+        return a *% b;
+    }
+
     pub fn initVm(allocator: std.mem.Allocator, binary_data: []u16) Vm {
         return .{
             .allocator = allocator,
@@ -48,7 +56,7 @@ pub const Vm = struct {
         defer vm.stack.deinit();
     }
 
-    fn operand3(self: *Vm, comptime op_code: OpCode) !void {
+    fn _operand3(self: *Vm, comptime op_code: OpCode) !void {
         comptime std.debug.assert(op_code == .ADD or op_code == .MULT);
 
         const register = try read_register_id(try self.binary_accessor.getCell(self.pc));
@@ -60,6 +68,16 @@ pub const Vm = struct {
             OpCode.MULT => (a *% b),
             else => unreachable,
         };
+
+        put_value_into_register(&self.registers, register, value % NUMBER_CAP);
+    }
+
+    fn operand3(self: *Vm, comptime func: (fn (a: u16, b: u16) u16)) !void {
+        const register = try read_register_id(try self.binary_accessor.getCell(self.pc));
+        const a = try read_value_at(self.binary_accessor, &self.registers, self.pc + 1);
+        const b = try read_value_at(self.binary_accessor, &self.registers, self.pc + 2);
+
+        const value = func(a, b);
 
         put_value_into_register(&self.registers, register, value % NUMBER_CAP);
     }
@@ -125,12 +143,12 @@ pub const Vm = struct {
                     }
                 },
                 OpCode.ADD => {
-                    try self.operand3(OpCode.ADD);
+                    try self.operand3(add);
                 },
                 // mult: 10 a b c
                 //   store into <a> the product of <b> and <c> (modulo 32768)
                 OpCode.MULT => {
-                    try self.operand3(OpCode.MULT);
+                    try self.operand3(mult);
                 },
                 // mod: 11 a b c
                 //   store into <a> the remainder of <b> divided by <c>

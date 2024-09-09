@@ -19,11 +19,11 @@ pub fn main() !void {
         //     .allocator = allocator,
         // },
         ._inner_state = .{
-            .binary = @constCast(&[_]u16{0}**10),
+            .binary = @constCast(&[_]u16{0} ** 10),
             .allocator = allocator,
         },
     };
-    _ = a ;
+    _ = a;
 
     var loader = try ChallengeLoader.init(allocator);
     defer loader.deinit();
