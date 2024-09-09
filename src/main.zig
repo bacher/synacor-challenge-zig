@@ -12,10 +12,18 @@ pub fn main() !void {
     }
     const allocator = gpa.allocator();
 
+    // const a = ChallengeLoader{
+    //     ._inner_state = .{
+    //         .binary = @constCast(&[_]u16{0}**10),
+    //         .allocator = allocator,
+    //     },
+    // };
+    // _ = a ;
+
     var loader = try ChallengeLoader.init(allocator);
     defer loader.deinit();
 
-    var vm = vmModule.Vm.initVm(allocator, try loader.getBinary());
+    var vm = vmModule.Vm.initVm(allocator, loader.getBinary());
     defer vm.deinit();
 
     std.debug.print("vm address:        {*}\n", .{&vm});

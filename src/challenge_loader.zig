@@ -6,7 +6,7 @@ const InnerState = struct {
 };
 
 pub const ChallengeLoader = struct {
-    _inner_state: ?InnerState = null,
+    _inner_state: InnerState,
 
     pub fn init(allocator: std.mem.Allocator) !ChallengeLoader {
         var is_success = false;
@@ -45,15 +45,11 @@ pub const ChallengeLoader = struct {
     }
 
     pub fn deinit(self: *ChallengeLoader) void {
-        if (self._inner_state) |state| {
-            state.allocator.free(state.binary);
-        }
+        const state = self._inner_state;
+        state.allocator.free(state.binary);
     }
 
-    pub fn getBinary(self: *ChallengeLoader) ![]u16 {
-        if (self._inner_state) |state| {
-            return state.binary;
-        }
-        return error.NoInstanciated;
+    pub fn getBinary(self: *ChallengeLoader) []u16 {
+        return self._inner_state.binary;
     }
 };
