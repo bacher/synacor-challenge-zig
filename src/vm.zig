@@ -3,7 +3,6 @@ const opCodes = @import("./op_codes.zig");
 const ChallengeLoaderModule = @import("./challenge_loader.zig");
 
 const OpCode = opCodes.OpCode;
-const OpCode3 = opCodes.OpCode3;
 const ChallengeLoader = ChallengeLoaderModule.ChallengeLoader;
 
 const NUMBER_CAP = std.math.pow(u16, 2, 15);
@@ -49,14 +48,17 @@ pub const Vm = struct {
         defer vm.stack.deinit();
     }
 
-    fn operand3(self: *Vm, op_code: OpCode3) !void {
+    fn operand3(self: *Vm, comptime op_code: OpCode) !void {
+        comptime std.debug.assert(op_code == .ADD or op_code == .MULT);
+
         const register = try read_register_id(try self.binary_accessor.getCell(self.pc));
         const a = try read_value_at(self.binary_accessor, &self.registers, self.pc + 1);
         const b = try read_value_at(self.binary_accessor, &self.registers, self.pc + 2);
 
         const value = switch (op_code) {
-            OpCode3.ADD => (a +% b),
-            OpCode3.MULT => (a *% b),
+            OpCode.ADD => (a +% b),
+            OpCode.MULT => (a *% b),
+            else => unreachable,
         };
 
         put_value_into_register(&self.registers, register, value % NUMBER_CAP);
@@ -123,15 +125,12 @@ pub const Vm = struct {
                     }
                 },
                 OpCode.ADD => {
-                    try self.operand3(OpCode3.ADD);
+                    try self.operand3(OpCode.ADD);
                 },
                 // mult: 10 a b c
                 //   store into <a> the product of <b> and <c> (modulo 32768)
                 OpCode.MULT => {
-                    const register = try read_register_id(try self.binary_accessor.getCell(self.pc));
-                    const a = try read_value_at(self.binary_accessor, &self.registers, self.pc + 1);
-                    const b = try read_value_at(self.binary_accessor, &self.registers, self.pc + 2);
-                    put_value_into_register(&self.registers, register, (a *% b) % NUMBER_CAP);
+                    try self.operand3(OpCode.MULT);
                 },
                 // mod: 11 a b c
                 //   store into <a> the remainder of <b> divided by <c>

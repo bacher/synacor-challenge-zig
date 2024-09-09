@@ -34,11 +34,6 @@ pub const OpCode = enum(u16) {
     }
 };
 
-pub const OpCode3 = enum(u16) {
-    ADD = @intFromEnum(OpCode.ADD),
-    MULT = @intFromEnum(OpCode.MULT),
-};
-
 pub fn getOpCodeArgsLength(opCode: OpCode) u16 {
     return switch (opCode) {
         OpCode.HALT => 0,
