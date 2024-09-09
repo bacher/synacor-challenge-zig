@@ -12,8 +12,7 @@ pub fn main() !void {
     }
     const allocator = gpa.allocator();
 
-    var loader: ChallengeLoader = .{};
-    try loader.init(allocator);
+    var loader = try ChallengeLoader.init(allocator);
     defer loader.deinit();
 
     var vm = vmModule.Vm.initVm(allocator, try loader.getBinary());

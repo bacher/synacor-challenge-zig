@@ -8,7 +8,7 @@ const InnerState = struct {
 pub const ChallengeLoader = struct {
     _inner_state: ?InnerState = null,
 
-    pub fn init(self: *ChallengeLoader, allocator: std.mem.Allocator) !void {
+    pub fn init(allocator: std.mem.Allocator) !ChallengeLoader {
         var is_success = false;
 
         const file = try std.fs.cwd().openFile("./challenge/challenge.bin", .{});
@@ -36,12 +36,12 @@ pub const ChallengeLoader = struct {
 
         try std.testing.expect(bytes_read == binary_size);
 
-        self._inner_state = .{
+        is_success = true;
+
+        return .{ ._inner_state = .{
             .allocator = allocator,
             .binary = buffer,
-        };
-
-        is_success = true;
+        } };
     }
 
     pub fn deinit(self: *ChallengeLoader) void {
