@@ -5,7 +5,6 @@ const ChallengeLoaderModule = @import("./challenge_loader.zig");
 const OpCode = opCodes.OpCode;
 const OpCode3 = opCodes.OpCode3;
 const ChallengeLoader = ChallengeLoaderModule.ChallengeLoader;
-const ChallengeData = ChallengeLoaderModule.ChallengeData;
 
 const NUMBER_CAP = std.math.pow(u16, 2, 15);
 const REGISTER_START = NUMBER_CAP;
@@ -16,11 +15,11 @@ const WordType = u16;
 const RegState = [REGISTERS_COUNT]WordType;
 
 const BinaryAccessor = struct {
-    data: ChallengeData,
+    buffer: []u16,
 
     pub fn getCell(self: *const BinaryAccessor, address: u16) !u16 {
-        if (address < self.data.size) {
-            return self.data.buffer[address];
+        if (address < self.buffer.len) {
+            return self.buffer[address];
         }
         return error.InvalidBinaryAccess;
     }
@@ -36,10 +35,10 @@ pub const Vm = struct {
     memory: [MEMORY_SIZE]u16 = std.mem.zeroes([MEMORY_SIZE]u16),
     pc: u16 = 0,
 
-    pub fn initVm(allocator: std.mem.Allocator, binary_data: ChallengeData) Vm {
+    pub fn initVm(allocator: std.mem.Allocator, binary_data: []u16) Vm {
         return .{
             .allocator = allocator,
-            .binary_accessor = BinaryAccessor{ .data = binary_data },
+            .binary_accessor = BinaryAccessor{ .buffer = binary_data },
             // .registers = [_]u16{0} ** 8,
             .stack = std.ArrayList(u16).init(allocator),
             // .memory = std.mem.zeroes([MEMORY_SIZE]u16),

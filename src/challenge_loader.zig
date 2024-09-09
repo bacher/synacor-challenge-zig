@@ -1,17 +1,8 @@
 const std = @import("std");
 
 const InnerState = struct {
-    buffer: []u8,
-    binary: [*]u16,
-    binary_size: u64,
+    binary: []u16,
     allocator: std.mem.Allocator,
-};
-
-// ![]align(2) u8
-
-pub const ChallengeData = struct {
-    buffer: [*]u16,
-    size: u64,
 };
 
 pub const ChallengeLoader = struct {
@@ -25,14 +16,20 @@ pub const ChallengeLoader = struct {
         const stat = try file.stat();
         const binary_size = stat.size;
 
-        const buffer = try allocator.alignedAlloc(u8, 2, binary_size);
+        if (binary_size % 2 != 0) {
+            return error.InvalidChallengeFile;
+        }
+
+        const buffer = try allocator.alloc(u16, binary_size / 2);
         defer {
             if (!is_success) {
                 allocator.free(buffer);
             }
         }
 
-        const bytes_read = file.readAll(buffer) catch |err| {
+        const buffer_u8 = std.mem.sliceAsBytes(buffer);
+
+        const bytes_read = file.readAll(buffer_u8) catch |err| {
             std.debug.print("can't read the file: {!}", .{err});
             return err;
         };
@@ -41,9 +38,7 @@ pub const ChallengeLoader = struct {
 
         self._inner_state = .{
             .allocator = allocator,
-            .buffer = buffer,
-            .binary = @ptrCast(buffer),
-            .binary_size = binary_size,
+            .binary = buffer,
         };
 
         is_success = true;
@@ -51,16 +46,13 @@ pub const ChallengeLoader = struct {
 
     pub fn deinit(self: *ChallengeLoader) void {
         if (self._inner_state) |state| {
-            state.allocator.free(state.buffer);
+            state.allocator.free(state.binary);
         }
     }
 
-    pub fn getBinary(self: *ChallengeLoader) !ChallengeData {
+    pub fn getBinary(self: *ChallengeLoader) ![]u16 {
         if (self._inner_state) |state| {
-            return .{
-                .buffer = state.binary,
-                .size = state.binary_size,
-            };
+            return state.binary;
         }
         return error.NoInstanciated;
     }
