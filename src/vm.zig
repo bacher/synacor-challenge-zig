@@ -11,13 +11,15 @@ const REGISTERS_COUNT = 8;
 const MEMORY_SIZE = std.math.pow(u16, 2, 15);
 
 const WordType = u16;
-const RegState = [REGISTERS_COUNT]WordType;
+
+const RegisterId = u3;
+const Registers = [REGISTERS_COUNT]WordType;
 
 pub const Vm = struct {
     allocator: std.mem.Allocator,
     // registers: [8]u16,
     // registers: [8]u16 = undefined,
-    registers: [8]u16 = .{0} ** 8,
+    registers: Registers = .{0} ** REGISTERS_COUNT,
     stack: std.ArrayList(u16),
     memory: [MEMORY_SIZE]u16 = std.mem.zeroes([MEMORY_SIZE]u16),
     pc: u16 = 0,
@@ -233,12 +235,12 @@ fn read_value_at(vm: *Vm, pc: u16) !u16 {
     return read_value(&vm.registers, try vm.getMemoryCell(pc));
 }
 
-fn read_value(reg_state: *RegState, value: u16) !u16 {
+fn read_value(registers: *Registers, value: u16) !u16 {
     if (value < NUMBER_CAP) {
         return value;
     }
     if (value < REGISTER_START + REGISTERS_COUNT) {
-        return read_value(reg_state, reg_state.*[value - REGISTER_START]);
+        return read_value(registers, registers.*[value - REGISTER_START]);
     }
     return error.InvalidRef;
 }
@@ -247,15 +249,15 @@ fn is_register(value: u16) bool {
     return value >= REGISTER_START and value < REGISTER_START + REGISTERS_COUNT;
 }
 
-fn read_register_id(value: u16) !u16 {
+fn read_register_id(value: u16) !RegisterId {
     if (!is_register(value)) {
         return error.NotRegister;
     }
-    return value - REGISTER_START;
+    return @truncate(value - REGISTER_START);
 }
 
-fn put_value_into_register(reg_state: *RegState, register: u16, value: u16) void {
-    reg_state.*[register] = value;
+fn put_value_into_register(registers: *Registers, register: RegisterId, value: u16) void {
+    registers.*[register] = value;
 }
 
 fn read_memory(memory: []u16, cell: u16) !u16 {
