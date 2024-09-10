@@ -34,7 +34,7 @@ pub const OpCode = enum(u16) {
     }
 };
 
-pub fn getOpCodeArgsLength(opCode: OpCode) u16 {
+pub fn getOpCodeArgsLength(opCode: OpCode) u8 {
     return switch (opCode) {
         OpCode.HALT => 0,
         OpCode.SET => 2,

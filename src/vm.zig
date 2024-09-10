@@ -5,47 +5,50 @@ const ChallengeLoaderModule = @import("./challenge_loader.zig");
 const OpCode = opCodes.OpCode;
 const ChallengeLoader = ChallengeLoaderModule.ChallengeLoader;
 
-const NUMBER_CAP = std.math.pow(u16, 2, 15);
+const WordType = u15;
+const MemoryAddress = u15;
+const MemoryValue = u16;
+const RegisterId = u3;
+
+const NUMBER_CAP = std.math.pow(u16, 2, @bitSizeOf(WordType));
 const REGISTER_START = NUMBER_CAP;
 const REGISTERS_COUNT = 8;
-const MEMORY_SIZE = std.math.pow(u16, 2, 15);
+const MEMORY_SIZE = std.math.pow(u16, 2, @bitSizeOf(MemoryAddress));
 
-const WordType = u16;
-
-const RegisterId = u3;
 const Registers = [REGISTERS_COUNT]WordType;
+const Memory = [MEMORY_SIZE]MemoryValue;
 
 pub const Vm = struct {
     allocator: std.mem.Allocator,
     // registers: [8]u16,
     // registers: [8]u16 = undefined,
     registers: Registers = .{0} ** REGISTERS_COUNT,
-    stack: std.ArrayList(u16),
-    memory: [MEMORY_SIZE]u16 = std.mem.zeroes([MEMORY_SIZE]u16),
-    pc: u16 = 0,
+    stack: std.ArrayList(WordType),
+    memory: Memory = std.mem.zeroes([MEMORY_SIZE]MemoryValue),
+    pc: MemoryAddress = 0,
 
-    fn add(a: u16, b: u16) u16 {
+    fn add(a: WordType, b: WordType) WordType {
         return a +% b;
     }
 
-    fn mult(a: u16, b: u16) u16 {
+    fn mult(a: WordType, b: WordType) WordType {
         return a *% b;
     }
 
-    fn mod(a: u16, b: u16) u16 {
+    fn mod(a: WordType, b: WordType) WordType {
         return a % b;
     }
 
-    fn andFn(a: u16, b: u16) u16 {
+    fn andFn(a: WordType, b: WordType) WordType {
         return a & b;
     }
 
-    fn orFn(a: u16, b: u16) u16 {
+    fn orFn(a: WordType, b: WordType) WordType {
         return a | b;
     }
 
-    pub fn initVm(allocator: std.mem.Allocator, binary_data: []u16) !Vm {
-        var memory = std.mem.zeroes([MEMORY_SIZE]u16);
+    pub fn initVm(allocator: std.mem.Allocator, binary_data: []MemoryValue) !Vm {
+        var memory = std.mem.zeroes([MEMORY_SIZE]MemoryValue);
 
         try std.testing.expect(memory.len >= binary_data.len);
 
@@ -54,7 +57,7 @@ pub const Vm = struct {
         return .{
             .allocator = allocator,
             // .registers = [_]u16{0} ** 8,
-            .stack = std.ArrayList(u16).init(allocator),
+            .stack = std.ArrayList(WordType).init(allocator),
             .memory = memory,
         };
     }
@@ -80,21 +83,21 @@ pub const Vm = struct {
     //     put_value_into_register(&self.registers, register, value % NUMBER_CAP);
     // }
 
-    fn getMemoryCell(self: *Vm, memory_address: u16) !u16 {
+    fn getMemoryCell(self: *Vm, memory_address: MemoryAddress) !MemoryValue {
         if (memory_address < self.memory.len) {
             return self.memory[memory_address];
         }
         return error.InvalidBinaryAccess;
     }
 
-    fn operand3(self: *Vm, comptime func: (fn (a: u16, b: u16) u16)) !void {
+    fn operand3(self: *Vm, comptime func: (fn (a: WordType, b: WordType) WordType)) !void {
         const register = try read_register_id(try self.getMemoryCell(self.pc));
         const a = try read_value_at(self, self.pc + 1);
         const b = try read_value_at(self, self.pc + 2);
 
         const value = func(a, b);
 
-        put_value_into_register(&self.registers, register, value % NUMBER_CAP);
+        put_value_into_register(&self.registers, register, value);
     }
 
     pub fn run(self: *Vm) !void {
@@ -106,7 +109,7 @@ pub const Vm = struct {
 
             const op_code = try OpCode.parse(op);
             const args_length = opCodes.getOpCodeArgsLength(op_code);
-            var jump_to: ?u16 = null;
+            var jump_to: ?MemoryAddress = null;
 
             switch (op_code) {
                 OpCode.HALT => {
@@ -183,7 +186,7 @@ pub const Vm = struct {
                 OpCode.NOT => {
                     const register = try read_register_id(try self.getMemoryCell(self.pc));
                     const a = try read_value_at(self, self.pc + 1);
-                    put_value_into_register(&self.registers, register, (~a) % NUMBER_CAP);
+                    put_value_into_register(&self.registers, register, ~a);
                 },
                 // rmem: 15 a b
                 //   read memory at address <b> and write it to <a>
@@ -192,7 +195,9 @@ pub const Vm = struct {
                     const memory_address = try read_value_at(self, self.pc + 1);
                     const value = try read_memory(&self.memory, memory_address);
 
-                    put_value_into_register(&self.registers, register, value);
+                    try std.testing.expect(value < NUMBER_CAP);
+
+                    put_value_into_register(&self.registers, register, @intCast(value));
                 },
                 // wmem: 16 a b
                 //   write the value from <b> into memory at address <a>
@@ -231,13 +236,13 @@ pub const Vm = struct {
     }
 };
 
-fn read_value_at(vm: *Vm, pc: u16) !u16 {
+fn read_value_at(vm: *Vm, pc: MemoryAddress) !WordType {
     return read_value(&vm.registers, try vm.getMemoryCell(pc));
 }
 
-fn read_value(registers: *Registers, value: u16) !u16 {
+fn read_value(registers: *Registers, value: MemoryValue) !WordType {
     if (value < NUMBER_CAP) {
-        return value;
+        return @intCast(value);
     }
     if (value < REGISTER_START + REGISTERS_COUNT) {
         return read_value(registers, registers.*[value - REGISTER_START]);
@@ -245,29 +250,29 @@ fn read_value(registers: *Registers, value: u16) !u16 {
     return error.InvalidRef;
 }
 
-fn is_register(value: u16) bool {
+fn is_register(value: MemoryValue) bool {
     return value >= REGISTER_START and value < REGISTER_START + REGISTERS_COUNT;
 }
 
-fn read_register_id(value: u16) !RegisterId {
+fn read_register_id(value: MemoryValue) !RegisterId {
     if (!is_register(value)) {
         return error.NotRegister;
     }
     return @truncate(value - REGISTER_START);
 }
 
-fn put_value_into_register(registers: *Registers, register: RegisterId, value: u16) void {
+fn put_value_into_register(registers: *Registers, register: RegisterId, value: WordType) void {
     registers.*[register] = value;
 }
 
-fn read_memory(memory: []u16, cell: u16) !u16 {
+fn read_memory(memory: *Memory, cell: MemoryAddress) !MemoryValue {
     if (cell >= memory.len) {
         return error.InvalidMemoryAddress;
     }
     return memory[cell];
 }
 
-fn write_memory(memory: []u16, memory_address: u16, value: u16) !void {
+fn write_memory(memory: *Memory, memory_address: MemoryAddress, value: WordType) !void {
     if (memory_address >= memory.len) {
         return error.InvalidMemoryAddress;
     }
