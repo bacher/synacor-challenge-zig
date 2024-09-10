@@ -192,6 +192,14 @@ pub const Vm = struct {
 
                     put_value_into_register(&self.registers, register, value);
                 },
+                // wmem: 16 a b
+                //   write the value from <b> into memory at address <a>
+                OpCode.WRITE_MEM => {
+                    const memory_address = try read_value_at(self, self.pc);
+                    const b = try read_value_at(self, self.pc + 1);
+
+                    try write_memory(&self.memory, memory_address, b);
+                },
                 // call: 17 a
                 //   write the address of the next instruction to the stack and jump to <a>
                 OpCode.CALL => {
@@ -257,9 +265,9 @@ fn read_memory(memory: []u16, cell: u16) !u16 {
     return memory[cell];
 }
 
-fn set_memory(memory: []u16, cell: u16, value: u16) !void {
-    if (cell >= memory.len) {
+fn write_memory(memory: []u16, memory_address: u16, value: u16) !void {
+    if (memory_address >= memory.len) {
         return error.InvalidMemoryAddress;
     }
-    memory[cell] = value;
+    memory[memory_address] = value;
 }
