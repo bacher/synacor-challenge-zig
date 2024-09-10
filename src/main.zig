@@ -28,7 +28,7 @@ pub fn main() !void {
     var loader = try ChallengeLoader.init(allocator);
     defer loader.deinit();
 
-    var vm = vmModule.Vm.initVm(allocator, loader.getBinary());
+    var vm = try vmModule.Vm.initVm(allocator, loader.getBinary());
     defer vm.deinit();
 
     std.debug.print("vm address:        {*}\n", .{&vm});
