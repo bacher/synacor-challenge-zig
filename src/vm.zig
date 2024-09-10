@@ -42,6 +42,18 @@ pub const Vm = struct {
         return a *% b;
     }
 
+    fn mod (a: u16, b: u16) u16 {
+        return a % b;
+    }
+
+    fn andFn (a: u16, b: u16) u16 {
+        return a & b;
+    }
+
+    fn orFn (a: u16, b: u16) u16 {
+        return a | b;
+    }
+
     pub fn initVm(allocator: std.mem.Allocator, binary_data: []u16) Vm {
         return .{
             .allocator = allocator,
@@ -153,24 +165,15 @@ pub const Vm = struct {
                 // mod: 11 a b c
                 //   store into <a> the remainder of <b> divided by <c>
                 OpCode.MOD => {
-                    const register = try read_register_id(try self.binary_accessor.getCell(self.pc));
-                    const a = try read_value_at(self.binary_accessor, &self.registers, self.pc + 1);
-                    const b = try read_value_at(self.binary_accessor, &self.registers, self.pc + 2);
-                    put_value_into_register(&self.registers, register, a % b);
+                    try self.operand3(mod);
                 },
                 OpCode.AND => {
-                    const register = try read_register_id(try self.binary_accessor.getCell(self.pc));
-                    const a = try read_value_at(self.binary_accessor, &self.registers, self.pc + 1);
-                    const b = try read_value_at(self.binary_accessor, &self.registers, self.pc + 2);
-                    put_value_into_register(&self.registers, register, (a & b) % NUMBER_CAP);
+                    try self.operand3(andFn);
                 },
                 // or: 13 a b c
                 //   stores into <a> the bitwise or of <b> and <c>
                 OpCode.OR => {
-                    const register = try read_register_id(try self.binary_accessor.getCell(self.pc));
-                    const a = try read_value_at(self.binary_accessor, &self.registers, self.pc + 1);
-                    const b = try read_value_at(self.binary_accessor, &self.registers, self.pc + 2);
-                    put_value_into_register(&self.registers, register, (a | b) % NUMBER_CAP);
+                    try self.operand3(orFn);
                 },
                 // not: 14 a b
                 //   stores 15-bit bitwise inverse of <b> in <a>
