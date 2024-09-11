@@ -101,6 +101,10 @@ pub const Vm = struct {
     }
 
     pub fn run(self: *Vm) !void {
+        const stdin = std.io.getStdIn();
+        var input_buffer: [100]u8 = undefined;
+        var input_buffer_rest: ?[]u8 = null;
+
         while (true) {
             const op = try self.getMemoryCell(self.pc);
             self.pc += 1;
@@ -214,16 +218,63 @@ pub const Vm = struct {
                     try self.stack.append(self.pc + 1);
                     jump_to = a;
                 },
+                // ret: 18
+                //   remove the top element from the stack and jump to it; empty stack = halt
+                OpCode.RET => {
+                    const optional_value = self.stack.popOrNull();
+                    if (optional_value) |value| {
+                        jump_to = value;
+                    } else {
+                        return;
+                    }
+                },
+                // out: 19 a
+                //   write the character represented by ascii code <a> to the terminal
                 OpCode.OUT => {
                     const output_char: u8 = @truncate(try read_value_at(self, self.pc));
                     std.debug.print("{c}", .{output_char});
                 },
+                // in: 20 a
+                //   read a character from the terminal and write its ascii code to <a>; it can be assumed that once input starts, it will continue until a newline is encountered; this means that you can safely read whole lines from the keyboard and trust that they will be fully read
+                OpCode.IN => {
+                    const register = try read_register_id(try self.getMemoryCell(self.pc));
+
+                    var value: u8 = undefined;
+
+                    if (input_buffer_rest == null) {
+                        std.debug.print("> ", .{});
+                        const std_in_reader = stdin.reader();
+                        const line = try std_in_reader.readUntilDelimiterOrEof(&input_buffer, '\n');
+
+                        if (line) |actual_line| {
+                            // std.debug.print("{any}", .{actual_line});
+                            try std.testing.expect(actual_line.len > 0);
+                            input_buffer_rest = actual_line;
+                        } else {
+                            return error.NoInput;
+                        }
+                    }
+
+                    if (input_buffer_rest) |*input| {
+                        if (input.len == 0) {
+                            value = '\n';
+                            input_buffer_rest = null;
+                        } else {
+                            value = input.*[0];
+                            try std.testing.expect(value < 256);
+                            input.* = input.*[1..];
+                        }
+                    } else {
+                        return error.NoInput;
+                    }
+
+                    std.debug.print("put value: {c}\n", .{value});
+                    put_value_into_register(&self.registers, register, value);
+                },
+                // noop: 21
+                //   no operation
                 OpCode.NOOP => {
                     // noop;
-                },
-                else => {
-                    std.debug.print("Unsupported opcode {}\n", .{op});
-                    return;
                 },
             }
 

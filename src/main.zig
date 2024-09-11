@@ -31,13 +31,6 @@ pub fn main() !void {
     var vm = try vmModule.Vm.initVm(allocator, loader.getBinary());
     defer vm.deinit();
 
-    std.debug.print("vm address:        {*}\n", .{&vm});
-    std.debug.print("memory address:    {*}\n", .{&vm.memory});
-    std.debug.print("memory[0] address: {*}\n", .{&vm.memory[0]});
-    std.debug.print("memory[0] value:   {d}\n", .{vm.memory[0]});
-    std.debug.print("memory[1] value:   {d}\n", .{vm.memory[1]});
-    std.debug.print("memory[2] value:   {d}\n", .{vm.memory[2]});
-
     try vm.run();
 }
 
