@@ -24,3 +24,27 @@ test "hmm" {
     try expect(@as(*const bool, @ptrCast(@alignCast(z + 13))).* == true);
     try expect(@as(*const bool, @ptrCast(@alignCast(z + 14))).* == true);
 }
+
+test "mem.span" {
+    const a = "hello";
+
+    const b: [*:0]const u8 = a.ptr;
+
+    const c = std.mem.span(b);
+
+    const d = b[0..10];
+
+    std.debug.print("a     = {*}\n", .{a});
+    std.debug.print("a.ptr = {*}\n", .{a.ptr});
+    std.debug.print("a.len = {d}\n", .{a.len});
+
+    std.debug.print("b     = {*}\n", .{b});
+
+    std.debug.print("c     = {*}\n", .{c});
+    std.debug.print("c.ptr = {*}\n", .{c.ptr});
+    std.debug.print("c.len = {d}\n", .{c.len});
+
+    std.debug.print("d     = {*}\n", .{d});
+    std.debug.print("d.ptr = {*}\n", .{d.ptr});
+    std.debug.print("d.len = {d}\n", .{d.len});
+}
