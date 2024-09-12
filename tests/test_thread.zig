@@ -15,7 +15,7 @@ fn ticker(step: u8) void {
 var tick: isize = 0;
 
 test "threading" {
-    const thread = try @call(.auto, std.Thread.spawn, .{.{}, ticker, .{1}});
+    const thread = try @call(.auto, std.Thread.spawn, .{ .{}, ticker, .{1} });
     try expect(tick == 0);
     thread.join();
     // std.time.sleep(3 * std.time.ns_per_s / 2);

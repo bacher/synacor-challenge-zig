@@ -26,5 +26,4 @@ test "AutoArrayHashMap" {
     const values = map.get(255);
 
     std.debug.print("{any}\n", .{values});
-
 }
