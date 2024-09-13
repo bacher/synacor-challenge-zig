@@ -1,16 +1,21 @@
 const std = @import("std");
 const opCodes = @import("./op_codes.zig");
 const ChallengeLoaderModule = @import("./challenge_loader.zig");
+const input_lines = @import("./input.zig").input_lines;
+const print_listing = @import("./debug.zig").print_listing;
+const print_registers = @import("./debug.zig").print_registers;
 
-const OpCode = opCodes.OpCode;
+var input_line: usize = 0;
+
+pub const OpCode = opCodes.OpCode;
 const ChallengeLoader = ChallengeLoaderModule.ChallengeLoader;
 
-const WordType = u15;
-const MemoryAddress = u15;
-const MemoryValue = u16;
-const RegisterId = u3;
+pub const WordType = u15;
+pub const MemoryAddress = u15;
+pub const MemoryValue = u16;
+pub const RegisterId = u3;
 
-const NUMBER_CAP = std.math.pow(u16, 2, @bitSizeOf(WordType));
+pub const NUMBER_CAP = std.math.pow(u16, 2, @bitSizeOf(WordType));
 const REGISTER_START = NUMBER_CAP;
 const REGISTERS_COUNT = 8;
 const MEMORY_SIZE = std.math.pow(u16, 2, @bitSizeOf(MemoryAddress));
@@ -26,6 +31,7 @@ pub const Vm = struct {
     stack: std.ArrayList(WordType),
     memory: Memory = std.mem.zeroes([MEMORY_SIZE]MemoryValue),
     pc: MemoryAddress = 0,
+    is_debug_mode: bool = false,
 
     fn add(a: WordType, b: WordType) WordType {
         return a +% b;
@@ -66,23 +72,6 @@ pub const Vm = struct {
         defer vm.stack.deinit();
     }
 
-    // TODO: delete
-    // fn _operand3(self: *Vm, comptime op_code: OpCode) !void {
-    //     comptime std.debug.assert(op_code == .ADD or op_code == .MULT);
-    //
-    //     const register = try read_register_id();
-    //     const a = try read_value_at(self, self.pc + 1);
-    //     const b = try read_value_at(self, self.pc + 2);
-    //
-    //     const value = switch (op_code) {
-    //         OpCode.ADD => (a +% b),
-    //         OpCode.MULT => (a *% b),
-    //         else => unreachable,
-    //     };
-    //
-    //     put_value_into_register(&self.registers, register, value % NUMBER_CAP);
-    // }
-
     fn getMemoryCell(self: *Vm, memory_address: MemoryAddress) !MemoryValue {
         if (memory_address < self.memory.len) {
             return self.memory[memory_address];
@@ -103,11 +92,70 @@ pub const Vm = struct {
     pub fn run(self: *Vm) !void {
         const stdin = std.io.getStdIn();
         var input_buffer: [100]u8 = undefined;
-        var input_buffer_rest: ?[]u8 = null;
+        var input_buffer_rest: ?[]const u8 = null;
+
+        var debug_input_buffer: [100]u8 = undefined;
 
         while (true) {
             const op = try self.getMemoryCell(self.pc);
             self.pc += 1;
+
+            if (self.is_debug_mode) {
+                std.debug.print("=====\n", .{});
+                print_registers(self);
+                std.debug.print("-----\n", .{});
+                print_listing(self, 5);
+
+                std.debug.print("[debug]> ", .{});
+                const std_in_reader = stdin.reader();
+                const line = try std_in_reader.readUntilDelimiterOrEof(&debug_input_buffer, '\n');
+
+                if (line) |actual_line| {
+                    if (std.mem.eql(u8, actual_line, "c")) {
+                        self.is_debug_mode = false;
+                    } else if (std.mem.indexOf(u8, actual_line, "set ") == 0) {
+                        const rest = actual_line[4..];
+
+                        var arguments = std.mem.split(u8, rest, " ");
+
+                        const registerIdString = arguments.first();
+
+                        if (arguments.next()) |valueString| {
+                            const register_id = std.fmt.parseInt(usize, registerIdString, 10) catch {
+                                std.debug.print("[debug] invalid arguments", .{});
+                                self.pc -= 1;
+                                continue;
+                            };
+
+                            const value = std.fmt.parseInt(usize, valueString, 10) catch {
+                                std.debug.print("[debug] invalid arguments", .{});
+                                self.pc -= 1;
+                                continue;
+                            };
+
+                            if (register_id >= REGISTERS_COUNT) {
+                                std.debug.print("[debug] invalid arguments", .{});
+                                self.pc -= 1;
+                                continue;
+                            }
+
+                            if (value >= NUMBER_CAP) {
+                                std.debug.print("[debug] invalid arguments", .{});
+                                self.pc -= 1;
+                                continue;
+                            }
+
+                            put_value_into_register(&self.registers, @truncate(register_id), @truncate(value));
+                            self.pc -= 1;
+                            continue;
+                        }
+
+                        std.debug.print("[debug] invalid arguments", .{});
+                    } else {
+                        std.debug.print("[debug] unknown command {s}", .{actual_line});
+                    }
+                }
+            }
 
             // std.debug.print("op code {d}\n", .{op});
 
@@ -242,16 +290,35 @@ pub const Vm = struct {
                     var value: u8 = undefined;
 
                     if (input_buffer_rest == null) {
-                        std.debug.print("> ", .{});
-                        const std_in_reader = stdin.reader();
-                        const line = try std_in_reader.readUntilDelimiterOrEof(&input_buffer, '\n');
+                        if (input_line < input_lines.len) {
+                            input_buffer_rest = input_lines[input_line];
+                            input_line += 1;
 
-                        if (line) |actual_line| {
-                            // std.debug.print("{any}", .{actual_line});
-                            try std.testing.expect(actual_line.len > 0);
-                            input_buffer_rest = actual_line;
+                            std.debug.print("> {s}", .{input_buffer_rest.?});
                         } else {
-                            return error.NoInput;
+                            std.debug.print("> ", .{});
+                            const std_in_reader = stdin.reader();
+                            const line = try std_in_reader.readUntilDelimiterOrEof(&input_buffer, '\n');
+
+                            if (line) |actual_line| {
+                                // std.debug.print("{any}", .{actual_line});
+                                try std.testing.expect(actual_line.len > 0);
+                                input_buffer_rest = actual_line;
+                            } else {
+                                return error.NoInput;
+                            }
+                        }
+
+                        if (std.mem.eql(u8, input_buffer_rest.?, ".debug")) {
+                            // var lines: usize = 10;
+                            // if (input_buffer_rest.?.len > 7) {
+                            //     lines = std.fmt.parseInt(usize, input_buffer_rest.?[7..], 10) catch 10;
+                            // }
+
+                            self.is_debug_mode = true;
+                            input_buffer_rest = null;
+                            self.pc -= 1;
+                            continue;
                         }
                     }
 
@@ -268,7 +335,6 @@ pub const Vm = struct {
                         return error.NoInput;
                     }
 
-                    std.debug.print("put value: {c}\n", .{value});
                     put_value_into_register(&self.registers, register, value);
                 },
                 // noop: 21
@@ -305,7 +371,7 @@ fn is_register(value: MemoryValue) bool {
     return value >= REGISTER_START and value < REGISTER_START + REGISTERS_COUNT;
 }
 
-fn read_register_id(value: MemoryValue) !RegisterId {
+pub fn read_register_id(value: MemoryValue) !RegisterId {
     if (!is_register(value)) {
         return error.NotRegister;
     }

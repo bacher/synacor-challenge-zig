@@ -1,0 +1,122 @@
+const std = @import("std");
+const Vm = @import("./vm.zig").Vm;
+const MemoryAddress = @import("./vm.zig").MemoryAddress;
+const MemoryValue = @import("./vm.zig").MemoryValue;
+const NUMBER_CAP = @import("./vm.zig").NUMBER_CAP;
+const read_register_id = @import("./vm.zig").read_register_id;
+const op_codes = @import("./op_codes.zig");
+const OpCode = op_codes.OpCode;
+
+pub fn print_listing(vm: *Vm, lines: usize) void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var pc = vm.pc - 1;
+
+    for (0..lines) |i| {
+        const op = vm.memory[pc];
+        const op_code = OpCode.parse(op) catch return;
+
+        if (i == 0) {
+            std.debug.print("{d}(*):   ", .{pc});
+        } else {
+            std.debug.print("{d}:      ", .{pc});
+        }
+
+        switch (op_code) {
+            OpCode.EQ => print_op3(vm, pc, "EQ  ", allocator),
+            OpCode.GT => print_op3(vm, pc, "GT  ", allocator),
+            OpCode.ADD => print_op3(vm, pc, "ADD ", allocator),
+            OpCode.MULT => print_op3(vm, pc, "MULT", allocator),
+            OpCode.MOD => print_op3(vm, pc, "MOD ", allocator),
+            OpCode.AND => print_op3(vm, pc, "AND ", allocator),
+            OpCode.OR => print_op3(vm, pc, "OR  ", allocator),
+
+            OpCode.SET => print_op2(vm, pc, "SET ", allocator),
+            OpCode.JT => print_op2(vm, pc, "JT  ", allocator),
+            OpCode.JF => print_op2(vm, pc, "JF  ", allocator),
+            OpCode.NOT => print_op2(vm, pc, "NOT ", allocator),
+            OpCode.READ_MEM => print_op2(vm, pc, "READ", allocator),
+            OpCode.WRITE_MEM => print_op2(vm, pc, "WRIT", allocator),
+
+            OpCode.PUSH => print_op1(vm, pc, "PUSH", allocator),
+            OpCode.POP => print_op1(vm, pc, "POP ", allocator),
+            OpCode.JUMP => print_op1(vm, pc, "JUMP", allocator),
+            OpCode.CALL => print_op1(vm, pc, "CALL", allocator),
+            OpCode.OUT => print_op1(vm, pc, "OUT ", allocator),
+            OpCode.IN => print_op1(vm, pc, "IN  ", allocator),
+
+            OpCode.HALT => print_op0("HALT"),
+            OpCode.RET => print_op0("RET "),
+            OpCode.NOOP => print_op0("NOOP"),
+        }
+
+        pc += 1 + op_codes.getOpCodeArgsLength(op_code);
+    }
+}
+
+fn print_op0(op: []const u8) void {
+    std.debug.print("{s}\n", .{
+        op,
+    });
+}
+
+fn print_op1(vm: *Vm, pc: MemoryAddress, op: []const u8, allocator: std.mem.Allocator) void {
+    std.debug.print("{s} {s}\n", .{
+        op,
+        format_memory(allocator, vm.memory[pc + 1]),
+    });
+}
+
+fn print_op2(vm: *Vm, pc: MemoryAddress, op: []const u8, allocator: std.mem.Allocator) void {
+    std.debug.print("{s} {s} {s}\n", .{
+        op,
+        format_memory(allocator, vm.memory[pc + 1]),
+        format_memory(allocator, vm.memory[pc + 2]),
+    });
+}
+
+fn print_op3(vm: *Vm, pc: MemoryAddress, op: []const u8, allocator: std.mem.Allocator) void {
+    std.debug.print("{s} {s} {s} {s}\n", .{
+        op,
+        format_memory(allocator, vm.memory[pc + 1]),
+        format_memory(allocator, vm.memory[pc + 2]),
+        format_memory(allocator, vm.memory[pc + 3]),
+    });
+}
+
+fn format_memory(allocator: std.mem.Allocator, value: MemoryValue) []const u8 {
+    if (value < NUMBER_CAP) {
+        const string = std.fmt.allocPrint(
+            allocator,
+            "{d:5}",
+            .{value},
+        ) catch "???";
+
+        return string;
+    }
+
+    const registerId: i8 = read_register_id(value) catch -1;
+
+    const string = std.fmt.allocPrint(
+        allocator,
+        "  <{d}>",
+        .{registerId},
+    ) catch "<???>";
+
+    return string;
+}
+
+pub fn print_registers(vm: *Vm) void {
+    std.debug.print("REG (0-3): {d:5}  {d:5}  {d:5}  {d:5} \nREG (4-7): {d:5}  {d:5}  {d:5}  {d:5}\n", .{
+        vm.registers[0],
+        vm.registers[1],
+        vm.registers[2],
+        vm.registers[3],
+        vm.registers[4],
+        vm.registers[5],
+        vm.registers[6],
+        vm.registers[7],
+    });
+}
