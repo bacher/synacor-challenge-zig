@@ -108,7 +108,7 @@ pub const Vm = struct {
                 std.debug.print("=====\n", .{});
                 print_registers(self);
                 std.debug.print("-----\n", .{});
-                print_listing(self, 5);
+                try print_listing(self, 5);
 
                 std.debug.print("[debug]> ", .{});
                 const std_in_reader = std.io.getStdIn().reader();
