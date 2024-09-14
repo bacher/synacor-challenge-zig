@@ -33,9 +33,9 @@ fn print_op_line(allocator: std.mem.Allocator, vm: *Vm, pc: MemoryAddress, i: ?u
     const op_code = OpCode.parse(op) catch return null;
 
     if (i != null and i == 0) {
-        std.debug.print("{d}(*):   ", .{pc});
+        std.debug.print("{d:5}: =>   ", .{pc});
     } else {
-        std.debug.print("{d}:      ", .{pc});
+        std.debug.print("{d:5}:      ", .{pc});
     }
 
     switch (op_code) {

@@ -32,10 +32,34 @@ pub const Vm = struct {
     memory: Memory = std.mem.zeroes([MEMORY_SIZE]MemoryValue),
     pc: MemoryAddress = 0,
     previous_op: MemoryAddress = 0,
-    is_debug_mode: bool = false,
 
     input_buffer: [100]u8 = undefined,
     input_buffer_rest: ?[]const u8 = null,
+
+    is_debug_mode: bool = false,
+    breakpoints: std.ArrayList(MemoryAddress),
+
+    pub fn initVm(allocator: std.mem.Allocator, binary_data: []MemoryValue) !Vm {
+        var memory = std.mem.zeroes([MEMORY_SIZE]MemoryValue);
+
+        try std.testing.expect(memory.len >= binary_data.len);
+
+        @memcpy(memory[0..binary_data.len], binary_data);
+
+        return .{
+            .allocator = allocator,
+            // .registers = [_]u16{0} ** 8,
+            .stack = std.ArrayList(WordType).init(allocator),
+            .memory = memory,
+
+            .breakpoints = std.ArrayList(MemoryAddress).init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *Vm) void {
+        self.stack.deinit();
+        self.breakpoints.deinit();
+    }
 
     fn add(a: WordType, b: WordType) WordType {
         return a +% b;
@@ -55,25 +79,6 @@ pub const Vm = struct {
 
     fn orFn(a: WordType, b: WordType) WordType {
         return a | b;
-    }
-
-    pub fn initVm(allocator: std.mem.Allocator, binary_data: []MemoryValue) !Vm {
-        var memory = std.mem.zeroes([MEMORY_SIZE]MemoryValue);
-
-        try std.testing.expect(memory.len >= binary_data.len);
-
-        @memcpy(memory[0..binary_data.len], binary_data);
-
-        return .{
-            .allocator = allocator,
-            // .registers = [_]u16{0} ** 8,
-            .stack = std.ArrayList(WordType).init(allocator),
-            .memory = memory,
-        };
-    }
-
-    pub fn deinit(vm: *Vm) void {
-        defer vm.stack.deinit();
     }
 
     fn getMemoryCell(self: *Vm, memory_address: MemoryAddress) !MemoryValue {
@@ -119,10 +124,10 @@ pub const Vm = struct {
 
                         var arguments = std.mem.split(u8, rest, " ");
 
-                        const registerIdString = arguments.first();
+                        const register_id_string = arguments.first();
 
                         if (arguments.next()) |valueString| {
-                            const register_id = std.fmt.parseInt(usize, registerIdString, 10) catch {
+                            const register_id = std.fmt.parseInt(usize, register_id_string, 10) catch {
                                 std.debug.print("[debug] invalid arguments", .{});
                                 continue;
                             };
@@ -147,6 +152,27 @@ pub const Vm = struct {
                         }
 
                         std.debug.print("[debug] invalid arguments", .{});
+                    } else if (std.mem.indexOf(u8, actual_line, "breakpoint ") == 0) {
+                        var arguments = std.mem.split(u8, actual_line, " ");
+
+                        const address_string = arguments.next();
+
+                        if (address_string) |address| {
+                            const op_address = std.fmt.parseInt(usize, address, 10) catch {
+                                std.debug.print("[debug] invalid arguments", .{});
+                                continue;
+                            };
+
+                            if (op_address >= self.memory.len) {
+                                std.debug.print("[debug] invalid arguments", .{});
+                                continue;
+                            }
+
+                            try self.breakpoints.append(@intCast(op_address));
+                        } else {
+                            std.debug.print("[debug] invalid arguments", .{});
+                            continue;
+                        }
                     } else {
                         std.debug.print("[debug] unknown command {s}", .{actual_line});
                     }
