@@ -21,12 +21,13 @@ pub fn print_listing(vm: *Vm, lines: usize) !void {
 
     for (0..lines) |i| {
         const arguments_count = try print_op_line(allocator, vm, pc, i);
-        pc += 1 + arguments_count;
+
+        pc = try vm.shiftAddress(pc, 1 + arguments_count);
     }
 }
 
-fn print_op_line(allocator: std.mem.Allocator, vm: *Vm, pc: MemoryAddress, i: ?usize) !MemoryAddress {
-    const op = vm.memory[pc];
+fn print_op_line(allocator: std.mem.Allocator, vm: *Vm, pc: MemoryAddress, i: ?usize) !u8 {
+    const op = vm.readMemory(pc);
     const op_code = try OpCode.parse(op);
 
     var mod: []const u8 = ("    ");
@@ -46,7 +47,7 @@ fn print_op_line(allocator: std.mem.Allocator, vm: *Vm, pc: MemoryAddress, i: ?u
         mod = "[B] ";
     }
 
-    std.debug.print("{d:5}: {s} ", .{ pc, mod });
+    std.debug.print("{d:5}: {s} ", .{ @intFromEnum(pc), mod });
 
     switch (op_code) {
         OpCode.EQ => try print_op3(vm, pc, "EQ  ", allocator),
@@ -88,24 +89,24 @@ fn print_op0(op: []const u8) void {
 fn print_op1(vm: *Vm, pc: MemoryAddress, op: []const u8, allocator: std.mem.Allocator) !void {
     std.debug.print("{s} {s}\n", .{
         op,
-        try format_memory(allocator, vm.memory[pc + 1]),
+        try format_memory(allocator, vm.readMemory(try vm.shiftAddress(pc, 1))),
     });
 }
 
 fn print_op2(vm: *Vm, pc: MemoryAddress, op: []const u8, allocator: std.mem.Allocator) !void {
     std.debug.print("{s} {s} {s}\n", .{
         op,
-        try format_memory(allocator, vm.memory[pc + 1]),
-        try format_memory(allocator, vm.memory[pc + 2]),
+        try format_memory(allocator, vm.readMemory(try vm.shiftAddress(pc, 1))),
+        try format_memory(allocator, vm.readMemory(try vm.shiftAddress(pc, 2))),
     });
 }
 
 fn print_op3(vm: *Vm, pc: MemoryAddress, op: []const u8, allocator: std.mem.Allocator) !void {
     std.debug.print("{s} {s} {s} {s}\n", .{
         op,
-        try format_memory(allocator, vm.memory[pc + 1]),
-        try format_memory(allocator, vm.memory[pc + 2]),
-        try format_memory(allocator, vm.memory[pc + 3]),
+        try format_memory(allocator, vm.readMemory(try vm.shiftAddress(pc, 1))),
+        try format_memory(allocator, vm.readMemory(try vm.shiftAddress(pc, 2))),
+        try format_memory(allocator, vm.readMemory(try vm.shiftAddress(pc, 3))),
     });
 }
 
@@ -120,12 +121,12 @@ fn format_memory(allocator: std.mem.Allocator, value: MemoryValue) ![]const u8 {
         return string;
     }
 
-    const registerId: i8 = try read_register_id(value);
+    const registerId = try read_register_id(value);
 
     const string = try std.fmt.allocPrint(
         allocator,
         "  <{d}>",
-        .{registerId},
+        .{@intFromEnum(registerId)},
     );
 
     return string;
@@ -149,5 +150,5 @@ fn read_register_id(value: MemoryValue) !RegisterId {
         return error.NotRegister;
     }
 
-    return @truncate(value - REGISTER_START);
+    return @enumFromInt(value - REGISTER_START);
 }

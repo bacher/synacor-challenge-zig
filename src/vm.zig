@@ -11,9 +11,11 @@ pub const OpCode = opCodes.OpCode;
 const ChallengeLoader = ChallengeLoaderModule.ChallengeLoader;
 
 pub const Word = u15;
-pub const MemoryAddress = u15;
+pub const MemoryAddress = enum(u15) { _ };
 pub const MemoryValue = u16;
-pub const RegisterId = u3;
+pub const RegisterId = enum(u3) { _ };
+
+const reg_7: RegisterId = @enumFromInt(7);
 
 pub const NUMBER_CAP = std.math.pow(u16, 2, @bitSizeOf(Word));
 pub const REGISTER_START = NUMBER_CAP;
@@ -36,8 +38,8 @@ pub const Vm = struct {
     registers: Registers = .{0} ** REGISTERS_COUNT,
     stack: std.ArrayList(Word),
     memory: Memory = std.mem.zeroes([MEMORY_SIZE]MemoryValue),
-    pc: MemoryAddress = 0,
-    previous_op: MemoryAddress = 0,
+    pc: MemoryAddress = @enumFromInt(0),
+    previous_op: MemoryAddress = @enumFromInt(0),
 
     input_buffer: [100]u8 = undefined,
     input_buffer_rest: ?[]const u8 = null,
@@ -89,28 +91,35 @@ pub const Vm = struct {
         return a | b;
     }
 
-    fn getMemoryCell(self: *Vm, memory_address: MemoryAddress) !MemoryValue {
-        if (memory_address < self.memory.len) {
-            return self.memory[memory_address];
-        }
-        return error.InvalidBinaryAccess;
+    pub fn readMemory(self: *Vm, memory_address: MemoryAddress) MemoryValue {
+        return self.memory[@intFromEnum(memory_address)];
     }
 
     fn operand3(self: *Vm, comptime func: (fn (a: Word, b: Word) Word)) !void {
-        const register = try self.read_register_id(try self.getMemoryCell(self.pc + 1));
-        const a = try read_value_at(self, self.pc + 2);
-        const b = try read_value_at(self, self.pc + 3);
+        const register = try self.readRegisterId(self.readMemory(try self.shiftAddress(self.pc, 1)));
+        const a = try self.readValueAt(try self.shiftAddress(self.pc, 2));
+        const b = try self.readValueAt(try self.shiftAddress(self.pc, 3));
 
         const value = func(a, b);
 
-        put_value_into_register(&self.registers, register, value);
+        putValueIntoRegister(&self.registers, register, value);
+    }
+
+    pub fn shiftAddress(_: *Vm, memory_address: MemoryAddress, shift: usize) !MemoryAddress {
+        const address = @intFromEnum(memory_address) + shift;
+
+        if (address >= MEMORY_SIZE) {
+            return error.InvalidMemoryAddress;
+        }
+
+        return @enumFromInt(address);
     }
 
     pub fn run(self: *Vm) !void {
         var debug_input_buffer: [100]u8 = undefined;
 
         while (true) {
-            const debug_result = try self.debug_step(&debug_input_buffer);
+            const debug_result = try self.debugStep(&debug_input_buffer);
 
             switch (debug_result) {
                 DebugStepResult.RESTART_STEP => {
@@ -124,7 +133,7 @@ pub const Vm = struct {
                 },
             }
 
-            self.execute_op() catch |err| {
+            self.executeOp() catch |err| {
                 if (err != error.RepeatOp) {
                     return err;
                 }
@@ -137,7 +146,7 @@ pub const Vm = struct {
         }
     }
 
-    fn debug_step(self: *Vm, debug_input_buffer: []u8) !DebugStepResult {
+    fn debugStep(self: *Vm, debug_input_buffer: []u8) !DebugStepResult {
         if (!self.is_debug_mode) {
             for (self.breakpoints.items) |item| {
                 if (item == self.pc) {
@@ -210,7 +219,7 @@ pub const Vm = struct {
                             return DebugStepResult.RESTART_STEP;
                         }
 
-                        put_value_into_register(&self.registers, @truncate(register_id), @truncate(value));
+                        putValueIntoRegister(&self.registers, @enumFromInt(register_id), @truncate(value));
                         return DebugStepResult.RESTART_STEP;
                     } else if (std.mem.indexOf(u8, actual_line, "breakpoint ") == 0 or
                         std.mem.indexOf(u8, actual_line, "b ") == 0)
@@ -238,7 +247,7 @@ pub const Vm = struct {
                             return DebugStepResult.RESTART_STEP;
                         }
 
-                        try self.breakpoints.append(@intCast(op_address));
+                        try self.breakpoints.append(@enumFromInt(op_address));
                     } else {
                         std.debug.print("[debug] unknown command \"{s}\"\n", .{actual_line});
                         self.skip_debug_listening_one_time = true;
@@ -251,7 +260,7 @@ pub const Vm = struct {
         return DebugStepResult.CONTINUE;
     }
 
-    fn execute_op(self: *Vm) !void {
+    fn executeOp(self: *Vm) !void {
         // const d = "hello";
         // var e: []u8 = @constCast(d);
         //
@@ -265,63 +274,64 @@ pub const Vm = struct {
         // std.debug.print("e = {s}\n", .{e});
 
         const current_op = self.pc;
-        const op = try self.getMemoryCell(current_op);
+        const op = self.readMemory(current_op);
 
         const op_code = try OpCode.parse(op);
         const args_length = opCodes.getOpCodeArgsLength(op_code);
         var jump_to: ?MemoryAddress = null;
 
-        const arg0 = self.pc + 1;
-        const arg1 = self.pc + 2;
-        const arg2 = self.pc + 3;
+        // TODO: Unsafe
+        const arg0: MemoryAddress = @enumFromInt(@intFromEnum(self.pc) + 1);
+        const arg1: MemoryAddress = @enumFromInt(@intFromEnum(self.pc) + 2);
+        const arg2: MemoryAddress = @enumFromInt(@intFromEnum(self.pc) + 3);
 
         switch (op_code) {
             OpCode.HALT => {
                 return;
             },
             OpCode.SET => {
-                const register = try self.read_register_id(try self.getMemoryCell(arg0));
-                const value = try read_value_at(self, arg1);
-                put_value_into_register(&self.registers, register, value);
+                const register = try self.readRegisterId(self.readMemory(arg0));
+                const value = try readValueAt(self, arg1);
+                putValueIntoRegister(&self.registers, register, value);
             },
             OpCode.PUSH => {
-                const value = try read_value_at(self, arg0);
+                const value = try readValueAt(self, arg0);
                 try self.stack.append(value);
             },
             OpCode.POP => {
-                const register = try self.read_register_id(try self.getMemoryCell(arg0));
+                const register = try self.readRegisterId(self.readMemory(arg0));
                 const optional_value = self.stack.popOrNull();
                 if (optional_value) |value| {
-                    put_value_into_register(&self.registers, register, value);
+                    putValueIntoRegister(&self.registers, register, value);
                 } else {
                     return error.StackExhausted;
                 }
             },
             OpCode.EQ => {
-                const register = try self.read_register_id(try self.getMemoryCell(arg0));
-                const a = try read_value_at(self, arg1);
-                const b = try read_value_at(self, arg2);
-                put_value_into_register(&self.registers, register, if (a == b) 1 else 0);
+                const register = try self.readRegisterId(self.readMemory(arg0));
+                const a = try self.readValueAt(arg1);
+                const b = try self.readValueAt(arg2);
+                putValueIntoRegister(&self.registers, register, if (a == b) 1 else 0);
             },
             OpCode.GT => {
-                const register = try self.read_register_id(try self.getMemoryCell(arg0));
-                const a = try read_value_at(self, arg1);
-                const b = try read_value_at(self, arg2);
-                put_value_into_register(&self.registers, register, if (a > b) 1 else 0);
+                const register = try self.readRegisterId(self.readMemory(arg0));
+                const a = try self.readValueAt(arg1);
+                const b = try self.readValueAt(arg2);
+                putValueIntoRegister(&self.registers, register, if (a > b) 1 else 0);
             },
             OpCode.JUMP => {
-                jump_to = try read_value_at(self, arg0);
+                jump_to = self.memoryAddressFromValue(try readValueAt(self, arg0));
             },
             OpCode.JT => {
-                const value = try read_value_at(self, arg0);
+                const value = try readValueAt(self, arg0);
                 if (value > 0) {
-                    jump_to = try read_value_at(self, arg1);
+                    jump_to = self.memoryAddressFromValue(try readValueAt(self, arg1));
                 }
             },
             OpCode.JF => {
-                const value = try read_value_at(self, arg0);
+                const value = try readValueAt(self, arg0);
                 if (value == 0) {
-                    jump_to = try read_value_at(self, arg1);
+                    jump_to = self.memoryAddressFromValue(try readValueAt(self, arg1));
                 }
             },
             OpCode.ADD => {
@@ -348,42 +358,42 @@ pub const Vm = struct {
             // not: 14 a b
             //   stores 15-bit bitwise inverse of <b> in <a>
             OpCode.NOT => {
-                const register = try self.read_register_id(try self.getMemoryCell(arg0));
-                const a = try read_value_at(self, arg1);
-                put_value_into_register(&self.registers, register, ~a);
+                const register = try self.readRegisterId(self.readMemory(arg0));
+                const a = try readValueAt(self, arg1);
+                putValueIntoRegister(&self.registers, register, ~a);
             },
             // rmem: 15 a b
             //   read memory at address <b> and write it to <a>
             OpCode.READ_MEM => {
-                const register = try self.read_register_id(try self.getMemoryCell(arg0));
-                const memory_address = try read_value_at(self, arg1);
-                const value = try read_memory(&self.memory, memory_address);
+                const register = try self.readRegisterId(self.readMemory(arg0));
+                const memory_address = self.memoryAddressFromValue(try readValueAt(self, arg1));
+                const value = self.readMemory(memory_address);
 
                 try std.testing.expect(value < NUMBER_CAP);
 
-                put_value_into_register(&self.registers, register, @intCast(value));
+                putValueIntoRegister(&self.registers, register, @intCast(value));
             },
             // wmem: 16 a b
             //   write the value from <b> into memory at address <a>
             OpCode.WRITE_MEM => {
-                const memory_address = try read_value_at(self, arg0);
-                const b = try read_value_at(self, arg1);
+                const memory_address = self.memoryAddressFromValue(try readValueAt(self, arg0));
+                const b = try readValueAt(self, arg1);
 
-                try write_memory(&self.memory, memory_address, b);
+                self.writeMemory(memory_address, b);
             },
             // call: 17 a
             //   write the address of the next instruction to the stack and jump to <a>
             OpCode.CALL => {
-                const a = try read_value_at(self, arg0);
-                try self.stack.append(arg1);
-                jump_to = a;
+                const a = try readValueAt(self, arg0);
+                try self.stack.append(@intFromEnum(arg1));
+                jump_to = self.memoryAddressFromValue(a);
             },
             // ret: 18
             //   remove the top element from the stack and jump to it; empty stack = halt
             OpCode.RET => {
                 const optional_value = self.stack.popOrNull();
                 if (optional_value) |value| {
-                    jump_to = value;
+                    jump_to = @enumFromInt(value);
                 } else {
                     return;
                 }
@@ -391,13 +401,13 @@ pub const Vm = struct {
             // out: 19 a
             //   write the character represented by ascii code <a> to the terminal
             OpCode.OUT => {
-                const output_char: u8 = @truncate(try read_value_at(self, arg0));
+                const output_char: u8 = @truncate(try readValueAt(self, arg0));
                 std.debug.print("{c}", .{output_char});
             },
             // in: 20 a
             //   read a character from the terminal and write its ascii code to <a>; it can be assumed that once input starts, it will continue until a newline is encountered; this means that you can safely read whole lines from the keyboard and trust that they will be fully read
             OpCode.IN => {
-                const register = try self.read_register_id(try self.getMemoryCell(arg0));
+                const register = try self.readRegisterId(self.readMemory(arg0));
 
                 var value: u8 = undefined;
 
@@ -440,7 +450,7 @@ pub const Vm = struct {
                     return error.NoInput;
                 }
 
-                put_value_into_register(&self.registers, register, value);
+                putValueIntoRegister(&self.registers, register, value);
             },
             // noop: 21
             //   no operation
@@ -454,15 +464,20 @@ pub const Vm = struct {
         if (jump_to) |new_pc| {
             self.pc = new_pc;
         } else {
-            self.pc += 1 + args_length;
+            self.pc = try self.shiftAddress(self.pc, 1 + args_length);
         }
+    }
+
+    pub fn memoryAddressFromValue(_: *Vm, value: Word) MemoryAddress {
+        comptime try std.testing.expect(@bitSizeOf(Word) == @bitSizeOf(MemoryAddress));
+        return @enumFromInt(value);
     }
 
     pub fn as_register(self: *Vm, value: MemoryValue) !?RegisterId {
         if (is_register(value)) {
-            const register_id: RegisterId = @truncate(value - REGISTER_START);
+            const register_id: RegisterId = @enumFromInt(value - REGISTER_START);
 
-            if (register_id == 7 and !self.is_debug_mode) {
+            if (register_id == reg_7 and !self.is_debug_mode) {
                 self.is_debug_mode = true;
                 return error.RepeatOp;
             }
@@ -472,7 +487,7 @@ pub const Vm = struct {
         return null;
     }
 
-    pub fn read_register_id(self: *Vm, value: MemoryValue) !RegisterId {
+    pub fn readRegisterId(self: *Vm, value: MemoryValue) !RegisterId {
         if (try self.as_register(value)) |register_id| {
             return register_id;
         }
@@ -480,20 +495,24 @@ pub const Vm = struct {
         return error.NotRegister;
     }
 
-    pub fn read_value_at(self: *Vm, pc: MemoryAddress) !Word {
-        return self.read_value(try self.getMemoryCell(pc));
+    pub fn readValueAt(self: *Vm, pc: MemoryAddress) !Word {
+        return self.readValue(self.readMemory(pc));
     }
 
-    pub fn read_value(self: *Vm, value: MemoryValue) !Word {
+    pub fn readValue(self: *Vm, value: MemoryValue) !Word {
         if (as_value(value)) |val| {
             return val;
         }
 
         if (try self.as_register(value)) |register_id| {
-            return self.registers[register_id];
+            return self.registers[@intFromEnum(register_id)];
         }
 
         return error.InvalidRef;
+    }
+
+    pub fn writeMemory(self: *Vm, memory_address: MemoryAddress, value: Word) void {
+        self.memory[@intFromEnum(memory_address)] = value;
     }
 };
 
@@ -504,22 +523,8 @@ pub fn as_value(value: MemoryValue) ?Word {
     return @intCast(value);
 }
 
-fn put_value_into_register(registers: *Registers, register: RegisterId, value: Word) void {
-    registers.*[register] = value;
-}
-
-fn read_memory(memory: *Memory, cell: MemoryAddress) !MemoryValue {
-    if (cell >= memory.len) {
-        return error.InvalidMemoryAddress;
-    }
-    return memory[cell];
-}
-
-fn write_memory(memory: *Memory, memory_address: MemoryAddress, value: Word) !void {
-    if (memory_address >= memory.len) {
-        return error.InvalidMemoryAddress;
-    }
-    memory[memory_address] = value;
+fn putValueIntoRegister(registers: *Registers, register_id: RegisterId, value: Word) void {
+    registers.*[@intFromEnum(register_id)] = value;
 }
 
 pub fn is_register(value: MemoryValue) bool {
