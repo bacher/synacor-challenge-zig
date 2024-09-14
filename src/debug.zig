@@ -34,6 +34,12 @@ fn print_op_line(allocator: std.mem.Allocator, vm: *Vm, pc: MemoryAddress, i: ?u
 
     if (i != null and i == 0) {
         std.debug.print("{d:5}: =>   ", .{pc});
+    } else if (for (vm.breakpoints.items) |breakpoint| {
+        if (breakpoint == pc) {
+            break true;
+        }
+    } else false) {
+        std.debug.print("{d:5}: [B]  ", .{pc});
     } else {
         std.debug.print("{d:5}:      ", .{pc});
     }
