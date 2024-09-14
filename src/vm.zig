@@ -23,6 +23,12 @@ pub const MEMORY_SIZE = std.math.pow(u16, 2, @bitSizeOf(MemoryAddress));
 const Registers = [REGISTERS_COUNT]WordType;
 const Memory = [MEMORY_SIZE]MemoryValue;
 
+const DebugStepResult = enum(u8) {
+    RESTART_STEP,
+    CONTINUE,
+    HALT,
+};
+
 pub const Vm = struct {
     allocator: std.mem.Allocator,
     // registers: [8]u16,
@@ -38,6 +44,8 @@ pub const Vm = struct {
 
     is_debug_mode: bool = false,
     breakpoints: std.ArrayList(MemoryAddress),
+    skip_debug_listening_one_time: bool = false,
+    need_to_reset_debug_one_time: bool = false,
 
     pub fn initVm(allocator: std.mem.Allocator, binary_data: []MemoryValue) !Vm {
         var memory = std.mem.zeroes([MEMORY_SIZE]MemoryValue);
@@ -99,113 +107,21 @@ pub const Vm = struct {
     }
 
     pub fn run(self: *Vm) !void {
-        var skip_debug_listening_one_time = false;
         var debug_input_buffer: [100]u8 = undefined;
 
         while (true) {
-            var need_to_reset_debug = false;
+            const debug_result = try self.debug_step(&debug_input_buffer);
 
-            if (!self.is_debug_mode) {
-                for (self.breakpoints.items) |item| {
-                    if (item == self.pc) {
-                        self.is_debug_mode = true;
-                        break;
-                    }
-                }
-            }
-
-            if (self.is_debug_mode) {
-                if (skip_debug_listening_one_time) {
-                    skip_debug_listening_one_time = false;
-                } else {
-                    std.debug.print("=====\n", .{});
-                    print_registers(self);
-                    std.debug.print("-----\n", .{});
-                    try print_listing(self, 5);
-                }
-
-                std.debug.print("[debug]> ", .{});
-                const std_in_reader = std.io.getStdIn().reader();
-                const line = try std_in_reader.readUntilDelimiterOrEof(&debug_input_buffer, '\n');
-
-                if (line) |actual_line| {
-                    const is_it_continue = std.mem.eql(u8, actual_line, "c");
-
-                    if (is_it_continue) {
-                        need_to_reset_debug = true;
-                    }
-
-                    if (!std.mem.eql(u8, actual_line, "") and !is_it_continue) {
-                        if (std.mem.indexOf(u8, actual_line, "set ") == 0) {
-                            const rest = actual_line[4..];
-
-                            var arguments = std.mem.split(u8, rest, " ");
-
-                            const register_id_string = arguments.first();
-
-                            if (arguments.next()) |value_string| {
-                                const register_id = std.fmt.parseInt(usize, register_id_string, 10) catch {
-                                    std.debug.print("[debug] invalid arguments\n", .{});
-                                    skip_debug_listening_one_time = true;
-                                    continue;
-                                };
-
-                                const value = std.fmt.parseInt(usize, value_string, 10) catch {
-                                    std.debug.print("[debug] invalid arguments\n", .{});
-                                    skip_debug_listening_one_time = true;
-                                    continue;
-                                };
-
-                                if (register_id >= REGISTERS_COUNT) {
-                                    std.debug.print("[debug] invalid arguments\n", .{});
-                                    skip_debug_listening_one_time = true;
-                                    continue;
-                                }
-
-                                if (value >= NUMBER_CAP) {
-                                    std.debug.print("[debug] invalid arguments\n", .{});
-                                    skip_debug_listening_one_time = true;
-                                    continue;
-                                }
-
-                                put_value_into_register(&self.registers, @truncate(register_id), @truncate(value));
-                                continue;
-                            }
-
-                            std.debug.print("[debug] invalid arguments\n", .{});
-                            skip_debug_listening_one_time = true;
-                        } else if (std.mem.indexOf(u8, actual_line, "breakpoint ") == 0) {
-                            var arguments = std.mem.split(u8, actual_line, " ");
-
-                            _ = arguments.next();
-                            const address_string = arguments.next();
-
-                            if (address_string) |address| {
-                                const op_address = std.fmt.parseInt(usize, address, 10) catch {
-                                    std.debug.print("[debug] invalid arguments\n", .{});
-                                    skip_debug_listening_one_time = true;
-                                    continue;
-                                };
-
-                                if (op_address >= self.memory.len) {
-                                    std.debug.print("[debug] invalid arguments\n", .{});
-                                    skip_debug_listening_one_time = true;
-                                    continue;
-                                }
-
-                                try self.breakpoints.append(@intCast(op_address));
-                            } else {
-                                std.debug.print("[debug] invalid arguments\n", .{});
-                                skip_debug_listening_one_time = true;
-                                continue;
-                            }
-                        } else {
-                            std.debug.print("[debug] unknown command \"{s}\"\n", .{actual_line});
-                            skip_debug_listening_one_time = true;
-                        }
-                        continue;
-                    }
-                }
+            switch (debug_result) {
+                DebugStepResult.RESTART_STEP => {
+                    continue;
+                },
+                DebugStepResult.CONTINUE => {
+                    // do nothing
+                },
+                DebugStepResult.HALT => {
+                    break;
+                },
             }
 
             self.execute_op() catch |err| {
@@ -216,10 +132,120 @@ pub const Vm = struct {
                 }
             };
 
-            if (need_to_reset_debug) {
+            if (self.need_to_reset_debug_one_time) {
                 self.is_debug_mode = false;
+                self.need_to_reset_debug_one_time = false;
             }
         }
+    }
+
+    fn debug_step(self: *Vm, debug_input_buffer: []u8) !DebugStepResult {
+        if (!self.is_debug_mode) {
+            for (self.breakpoints.items) |item| {
+                if (item == self.pc) {
+                    self.is_debug_mode = true;
+                    break;
+                }
+            }
+        }
+
+        if (self.is_debug_mode) {
+            if (self.skip_debug_listening_one_time) {
+                self.skip_debug_listening_one_time = false;
+            } else {
+                std.debug.print("=====\n", .{});
+                print_registers(self);
+                std.debug.print("-----\n", .{});
+                try print_listing(self, 5);
+            }
+
+            std.debug.print("[debug]> ", .{});
+            const std_in_reader = std.io.getStdIn().reader();
+            const line = try std_in_reader.readUntilDelimiterOrEof(debug_input_buffer, '\n');
+
+            if (line) |actual_line| {
+                const is_it_continue = std.mem.eql(u8, actual_line, "c");
+
+                if (is_it_continue) {
+                    self.need_to_reset_debug_one_time = true;
+                }
+
+                if (!std.mem.eql(u8, actual_line, "") and !is_it_continue) {
+                    if (std.mem.indexOf(u8, actual_line, "exit") == 0) {
+                        return DebugStepResult.HALT;
+                    } else if (std.mem.indexOf(u8, actual_line, "set ") == 0) {
+                        const rest = actual_line[4..];
+
+                        var arguments = std.mem.split(u8, rest, " ");
+
+                        const register_id_string = arguments.first();
+
+                        if (arguments.next()) |value_string| {
+                            const register_id = std.fmt.parseInt(usize, register_id_string, 10) catch {
+                                std.debug.print("[debug] invalid arguments\n", .{});
+                                self.skip_debug_listening_one_time = true;
+                                return DebugStepResult.RESTART_STEP;
+                            };
+
+                            const value = std.fmt.parseInt(usize, value_string, 10) catch {
+                                std.debug.print("[debug] invalid arguments\n", .{});
+                                self.skip_debug_listening_one_time = true;
+                                return DebugStepResult.RESTART_STEP;
+                            };
+
+                            if (register_id >= REGISTERS_COUNT) {
+                                std.debug.print("[debug] invalid arguments\n", .{});
+                                self.skip_debug_listening_one_time = true;
+                                return DebugStepResult.RESTART_STEP;
+                            }
+
+                            if (value >= NUMBER_CAP) {
+                                std.debug.print("[debug] invalid arguments\n", .{});
+                                self.skip_debug_listening_one_time = true;
+                                return DebugStepResult.RESTART_STEP;
+                            }
+
+                            put_value_into_register(&self.registers, @truncate(register_id), @truncate(value));
+                            return DebugStepResult.RESTART_STEP;
+                        }
+
+                        std.debug.print("[debug] invalid arguments\n", .{});
+                        self.skip_debug_listening_one_time = true;
+                    } else if (std.mem.indexOf(u8, actual_line, "breakpoint ") == 0) {
+                        var arguments = std.mem.split(u8, actual_line, " ");
+
+                        _ = arguments.next();
+                        const address_string = arguments.next();
+
+                        if (address_string) |address| {
+                            const op_address = std.fmt.parseInt(usize, address, 10) catch {
+                                std.debug.print("[debug] invalid arguments\n", .{});
+                                self.skip_debug_listening_one_time = true;
+                                return DebugStepResult.RESTART_STEP;
+                            };
+
+                            if (op_address >= self.memory.len) {
+                                std.debug.print("[debug] invalid arguments\n", .{});
+                                self.skip_debug_listening_one_time = true;
+                                return DebugStepResult.RESTART_STEP;
+                            }
+
+                            try self.breakpoints.append(@intCast(op_address));
+                        } else {
+                            std.debug.print("[debug] invalid arguments\n", .{});
+                            self.skip_debug_listening_one_time = true;
+                            return DebugStepResult.RESTART_STEP;
+                        }
+                    } else {
+                        std.debug.print("[debug] unknown command \"{s}\"\n", .{actual_line});
+                        self.skip_debug_listening_one_time = true;
+                    }
+                    return DebugStepResult.RESTART_STEP;
+                }
+            }
+        }
+
+        return DebugStepResult.CONTINUE;
     }
 
     fn execute_op(self: *Vm) !void {
