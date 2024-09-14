@@ -2,8 +2,11 @@ const std = @import("std");
 const Vm = @import("./vm.zig").Vm;
 const MemoryAddress = @import("./vm.zig").MemoryAddress;
 const MemoryValue = @import("./vm.zig").MemoryValue;
+const RegisterId = @import("./vm.zig").RegisterId;
 const NUMBER_CAP = @import("./vm.zig").NUMBER_CAP;
-const read_register_id = @import("./vm.zig").read_register_id;
+const REGISTER_START = @import("./vm.zig").REGISTER_START;
+const REGISTERS_COUNT = @import("./vm.zig").REGISTERS_COUNT;
+const is_register = @import("./vm.zig").is_register;
 const op_codes = @import("./op_codes.zig");
 const OpCode = op_codes.OpCode;
 
@@ -12,48 +15,58 @@ pub fn print_listing(vm: *Vm, lines: usize) void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var pc = vm.pc - 1;
+    _ = print_op_line(allocator, vm, vm.previous_op, null);
+
+    var pc = vm.pc;
 
     for (0..lines) |i| {
-        const op = vm.memory[pc];
-        const op_code = OpCode.parse(op) catch return;
+        const arguments_count = print_op_line(allocator, vm, pc, i);
 
-        if (i == 0) {
-            std.debug.print("{d}(*):   ", .{pc});
-        } else {
-            std.debug.print("{d}:      ", .{pc});
+        if (arguments_count) |len| {
+            pc += 1 + len;
         }
-
-        switch (op_code) {
-            OpCode.EQ => print_op3(vm, pc, "EQ  ", allocator),
-            OpCode.GT => print_op3(vm, pc, "GT  ", allocator),
-            OpCode.ADD => print_op3(vm, pc, "ADD ", allocator),
-            OpCode.MULT => print_op3(vm, pc, "MULT", allocator),
-            OpCode.MOD => print_op3(vm, pc, "MOD ", allocator),
-            OpCode.AND => print_op3(vm, pc, "AND ", allocator),
-            OpCode.OR => print_op3(vm, pc, "OR  ", allocator),
-
-            OpCode.SET => print_op2(vm, pc, "SET ", allocator),
-            OpCode.JT => print_op2(vm, pc, "JT  ", allocator),
-            OpCode.JF => print_op2(vm, pc, "JF  ", allocator),
-            OpCode.NOT => print_op2(vm, pc, "NOT ", allocator),
-            OpCode.READ_MEM => print_op2(vm, pc, "READ", allocator),
-            OpCode.WRITE_MEM => print_op2(vm, pc, "WRIT", allocator),
-
-            OpCode.PUSH => print_op1(vm, pc, "PUSH", allocator),
-            OpCode.POP => print_op1(vm, pc, "POP ", allocator),
-            OpCode.JUMP => print_op1(vm, pc, "JUMP", allocator),
-            OpCode.CALL => print_op1(vm, pc, "CALL", allocator),
-            OpCode.OUT => print_op1(vm, pc, "OUT ", allocator),
-            OpCode.IN => print_op1(vm, pc, "IN  ", allocator),
-
-            OpCode.HALT => print_op0("HALT"),
-            OpCode.RET => print_op0("RET "),
-            OpCode.NOOP => print_op0("NOOP"),
-        }
-
-        pc += 1 + op_codes.getOpCodeArgsLength(op_code);
     }
+}
+
+fn print_op_line(allocator: std.mem.Allocator, vm: *Vm, pc: MemoryAddress, i: ?usize) ?MemoryAddress {
+    const op = vm.memory[pc];
+    const op_code = OpCode.parse(op) catch return null;
+
+    if (i != null and i == 0) {
+        std.debug.print("{d}(*):   ", .{pc});
+    } else {
+        std.debug.print("{d}:      ", .{pc});
+    }
+
+    switch (op_code) {
+        OpCode.EQ => print_op3(vm, pc, "EQ  ", allocator),
+        OpCode.GT => print_op3(vm, pc, "GT  ", allocator),
+        OpCode.ADD => print_op3(vm, pc, "ADD ", allocator),
+        OpCode.MULT => print_op3(vm, pc, "MULT", allocator),
+        OpCode.MOD => print_op3(vm, pc, "MOD ", allocator),
+        OpCode.AND => print_op3(vm, pc, "AND ", allocator),
+        OpCode.OR => print_op3(vm, pc, "OR  ", allocator),
+
+        OpCode.SET => print_op2(vm, pc, "SET ", allocator),
+        OpCode.JT => print_op2(vm, pc, "JT  ", allocator),
+        OpCode.JF => print_op2(vm, pc, "JF  ", allocator),
+        OpCode.NOT => print_op2(vm, pc, "NOT ", allocator),
+        OpCode.READ_MEM => print_op2(vm, pc, "READ", allocator),
+        OpCode.WRITE_MEM => print_op2(vm, pc, "WRIT", allocator),
+
+        OpCode.PUSH => print_op1(vm, pc, "PUSH", allocator),
+        OpCode.POP => print_op1(vm, pc, "POP ", allocator),
+        OpCode.JUMP => print_op1(vm, pc, "JUMP", allocator),
+        OpCode.CALL => print_op1(vm, pc, "CALL", allocator),
+        OpCode.OUT => print_op1(vm, pc, "OUT ", allocator),
+        OpCode.IN => print_op1(vm, pc, "IN  ", allocator),
+
+        OpCode.HALT => print_op0("HALT"),
+        OpCode.RET => print_op0("RET "),
+        OpCode.NOOP => print_op0("NOOP"),
+    }
+
+    return op_codes.getOpCodeArgsLength(op_code);
 }
 
 fn print_op0(op: []const u8) void {
@@ -119,4 +132,12 @@ pub fn print_registers(vm: *Vm) void {
         vm.registers[6],
         vm.registers[7],
     });
+}
+
+fn read_register_id(value: MemoryValue) !RegisterId {
+    if (!is_register(value)) {
+        return error.NotRegister;
+    }
+
+    return @truncate(value - REGISTER_START);
 }
