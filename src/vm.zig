@@ -252,6 +252,18 @@ pub const Vm = struct {
     }
 
     fn execute_op(self: *Vm) !void {
+        // const d = "hello";
+        // var e: []u8 = @constCast(d);
+        //
+        // var n: u32 = 3;
+        // n += 1;
+        //
+        // e[n - 4] = 'A';
+        // e[n - 1] = 'P';
+        // try std.testing.expect(e[n - 1] == 'l');
+        //
+        // std.debug.print("e = {s}\n", .{e});
+
         const current_op = self.pc;
         const op = try self.getMemoryCell(current_op);
 
@@ -398,26 +410,19 @@ pub const Vm = struct {
                     } else {
                         std.debug.print("> ", .{});
                         const std_in_reader = std.io.getStdIn().reader();
-                        const line = try std_in_reader.readUntilDelimiterOrEof(&self.input_buffer, '\n');
 
-                        if (line) |actual_line| {
-                            // std.debug.print("{any}", .{actual_line});
-                            try std.testing.expect(actual_line.len > 0);
-                            self.input_buffer_rest = actual_line;
-                        } else {
-                            return error.NoInput;
+                        while (try std_in_reader.readUntilDelimiterOrEof(&self.input_buffer, '\n')) |line| {
+                            if (line.len > 0) {
+                                self.input_buffer_rest = line;
+                                break;
+                            }
+                            std.debug.print("> ", .{});
                         }
                     }
 
                     if (std.mem.eql(u8, self.input_buffer_rest.?, ".debug")) {
-                        // var lines: usize = 10;
-                        // if (input_buffer_rest.?.len > 7) {
-                        //     lines = std.fmt.parseInt(usize, input_buffer_rest.?[7..], 10) catch 10;
-                        // }
-
                         self.is_debug_mode = true;
                         self.input_buffer_rest = null;
-
                         return;
                     }
                 }
