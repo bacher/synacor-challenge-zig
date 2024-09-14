@@ -23,7 +23,7 @@ pub const MEMORY_SIZE = std.math.pow(u16, 2, @bitSizeOf(MemoryAddress));
 const Registers = [REGISTERS_COUNT]WordType;
 const Memory = [MEMORY_SIZE]MemoryValue;
 
-const DebugStepResult = enum(u8) {
+const DebugStepResult = enum {
     RESTART_STEP,
     CONTINUE,
     HALT,
@@ -125,9 +125,7 @@ pub const Vm = struct {
             }
 
             self.execute_op() catch |err| {
-                if (err == error.RepeatOp) {
-                    continue;
-                } else {
+                if (err != error.RepeatOp) {
                     return err;
                 }
             };
@@ -415,7 +413,7 @@ pub const Vm = struct {
                         self.is_debug_mode = true;
                         self.input_buffer_rest = null;
 
-                        return error.RepeatOp;
+                        return;
                     }
                 }
 
