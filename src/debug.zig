@@ -21,18 +21,15 @@ pub fn print_listing(vm: *Vm, lines: usize) !void {
 
     for (0..lines) |i| {
         const arguments_count = try print_op_line(allocator, vm, pc, i);
-
-        if (arguments_count) |len| {
-            pc += 1 + len;
-        }
+        pc += 1 + arguments_count;
     }
 }
 
-fn print_op_line(allocator: std.mem.Allocator, vm: *Vm, pc: MemoryAddress, i: ?usize) !?MemoryAddress {
+fn print_op_line(allocator: std.mem.Allocator, vm: *Vm, pc: MemoryAddress, i: ?usize) !MemoryAddress {
     const op = vm.memory[pc];
-    const op_code = OpCode.parse(op) catch return null;
+    const op_code = try OpCode.parse(op);
 
-    var mod: [4]u8 = @constCast("    ").*;
+    var mod: []const u8 = ("    ");
 
     const is_current = i != null and i == 0;
     const is_beakpoint = for (vm.breakpoints.items) |breakpoint| {
@@ -42,11 +39,11 @@ fn print_op_line(allocator: std.mem.Allocator, vm: *Vm, pc: MemoryAddress, i: ?u
     } else false;
 
     if (is_beakpoint and is_current) {
-        mod = @constCast("[B]>").*;
+        mod = "[B]>";
     } else if (is_current) {
-        mod = @constCast("  =>").*;
+        mod = "  =>";
     } else if (is_beakpoint) {
-        mod = @constCast("[B] ").*;
+        mod = "[B] ";
     }
 
     std.debug.print("{d:5}: {s} ", .{ pc, mod });
