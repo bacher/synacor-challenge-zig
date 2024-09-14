@@ -10,17 +10,17 @@ var input_line: usize = 0;
 pub const OpCode = opCodes.OpCode;
 const ChallengeLoader = ChallengeLoaderModule.ChallengeLoader;
 
-pub const WordType = u15;
+pub const Word = u15;
 pub const MemoryAddress = u15;
 pub const MemoryValue = u16;
 pub const RegisterId = u3;
 
-pub const NUMBER_CAP = std.math.pow(u16, 2, @bitSizeOf(WordType));
+pub const NUMBER_CAP = std.math.pow(u16, 2, @bitSizeOf(Word));
 pub const REGISTER_START = NUMBER_CAP;
 pub const REGISTERS_COUNT = 8;
 pub const MEMORY_SIZE = std.math.pow(u16, 2, @bitSizeOf(MemoryAddress));
 
-const Registers = [REGISTERS_COUNT]WordType;
+const Registers = [REGISTERS_COUNT]Word;
 const Memory = [MEMORY_SIZE]MemoryValue;
 
 const DebugStepResult = enum {
@@ -34,7 +34,7 @@ pub const Vm = struct {
     // registers: [8]u16,
     // registers: [8]u16 = undefined,
     registers: Registers = .{0} ** REGISTERS_COUNT,
-    stack: std.ArrayList(WordType),
+    stack: std.ArrayList(Word),
     memory: Memory = std.mem.zeroes([MEMORY_SIZE]MemoryValue),
     pc: MemoryAddress = 0,
     previous_op: MemoryAddress = 0,
@@ -57,7 +57,7 @@ pub const Vm = struct {
         return .{
             .allocator = allocator,
             // .registers = [_]u16{0} ** 8,
-            .stack = std.ArrayList(WordType).init(allocator),
+            .stack = std.ArrayList(Word).init(allocator),
             .memory = memory,
 
             .breakpoints = std.ArrayList(MemoryAddress).init(allocator),
@@ -69,23 +69,23 @@ pub const Vm = struct {
         self.breakpoints.deinit();
     }
 
-    fn add(a: WordType, b: WordType) WordType {
+    fn add(a: Word, b: Word) Word {
         return a +% b;
     }
 
-    fn mult(a: WordType, b: WordType) WordType {
+    fn mult(a: Word, b: Word) Word {
         return a *% b;
     }
 
-    fn mod(a: WordType, b: WordType) WordType {
+    fn mod(a: Word, b: Word) Word {
         return a % b;
     }
 
-    fn andFn(a: WordType, b: WordType) WordType {
+    fn andFn(a: Word, b: Word) Word {
         return a & b;
     }
 
-    fn orFn(a: WordType, b: WordType) WordType {
+    fn orFn(a: Word, b: Word) Word {
         return a | b;
     }
 
@@ -96,7 +96,7 @@ pub const Vm = struct {
         return error.InvalidBinaryAccess;
     }
 
-    fn operand3(self: *Vm, comptime func: (fn (a: WordType, b: WordType) WordType)) !void {
+    fn operand3(self: *Vm, comptime func: (fn (a: Word, b: Word) Word)) !void {
         const register = try self.read_register_id(try self.getMemoryCell(self.pc + 1));
         const a = try read_value_at(self, self.pc + 2);
         const b = try read_value_at(self, self.pc + 3);
@@ -480,31 +480,31 @@ pub const Vm = struct {
         return error.NotRegister;
     }
 
-    pub fn read_value_at(self: *Vm, pc: MemoryAddress) !WordType {
+    pub fn read_value_at(self: *Vm, pc: MemoryAddress) !Word {
         return self.read_value(try self.getMemoryCell(pc));
     }
 
-    pub fn read_value(self: *Vm, value: MemoryValue) !WordType {
+    pub fn read_value(self: *Vm, value: MemoryValue) !Word {
         if (as_value(value)) |val| {
             return val;
         }
 
         if (try self.as_register(value)) |register_id| {
-            return self.read_value(self.registers[register_id]);
+            return self.registers[register_id];
         }
 
         return error.InvalidRef;
     }
 };
 
-pub fn as_value(value: MemoryValue) ?WordType {
+pub fn as_value(value: MemoryValue) ?Word {
     if (value >= NUMBER_CAP) {
         return null;
     }
     return @intCast(value);
 }
 
-fn put_value_into_register(registers: *Registers, register: RegisterId, value: WordType) void {
+fn put_value_into_register(registers: *Registers, register: RegisterId, value: Word) void {
     registers.*[register] = value;
 }
 
@@ -515,7 +515,7 @@ fn read_memory(memory: *Memory, cell: MemoryAddress) !MemoryValue {
     return memory[cell];
 }
 
-fn write_memory(memory: *Memory, memory_address: MemoryAddress, value: WordType) !void {
+fn write_memory(memory: *Memory, memory_address: MemoryAddress, value: Word) !void {
     if (memory_address >= memory.len) {
         return error.InvalidMemoryAddress;
     }
