@@ -32,17 +32,19 @@ fn print_op_line(allocator: std.mem.Allocator, vm: *Vm, pc: MemoryAddress, i: ?u
     const op = vm.memory[pc];
     const op_code = OpCode.parse(op) catch return null;
 
+    var mod: [3]u8 = @constCast("   ").*;
+
     if (i != null and i == 0) {
-        std.debug.print("{d:5}: =>   ", .{pc});
+        mod = @constCast("=> ").*;
     } else if (for (vm.breakpoints.items) |breakpoint| {
         if (breakpoint == pc) {
             break true;
         }
     } else false) {
-        std.debug.print("{d:5}: [B]  ", .{pc});
-    } else {
-        std.debug.print("{d:5}:      ", .{pc});
+        mod = @constCast("[B]").*;
     }
+
+    std.debug.print("{d:5}: {s}  ", .{ pc, mod });
 
     switch (op_code) {
         OpCode.EQ => try print_op3(vm, pc, "EQ  ", allocator),

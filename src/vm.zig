@@ -99,6 +99,7 @@ pub const Vm = struct {
     }
 
     pub fn run(self: *Vm) !void {
+        var skip_debug_listening_one_time = false;
         var debug_input_buffer: [100]u8 = undefined;
 
         while (true) {
@@ -114,10 +115,14 @@ pub const Vm = struct {
             }
 
             if (self.is_debug_mode) {
-                std.debug.print("=====\n", .{});
-                print_registers(self);
-                std.debug.print("-----\n", .{});
-                try print_listing(self, 5);
+                if (skip_debug_listening_one_time) {
+                    skip_debug_listening_one_time = false;
+                } else {
+                    std.debug.print("=====\n", .{});
+                    print_registers(self);
+                    std.debug.print("-----\n", .{});
+                    try print_listing(self, 5);
+                }
 
                 std.debug.print("[debug]> ", .{});
                 const std_in_reader = std.io.getStdIn().reader();
@@ -139,26 +144,27 @@ pub const Vm = struct {
                             const register_id_string = arguments.first();
 
                             if (arguments.next()) |value_string| {
-                                std.debug.print("register_id_string {s}\n", .{register_id_string});
-                                std.debug.print("value_string {s}\n", .{value_string});
-
                                 const register_id = std.fmt.parseInt(usize, register_id_string, 10) catch {
                                     std.debug.print("[debug] invalid arguments\n", .{});
+                                    skip_debug_listening_one_time = true;
                                     continue;
                                 };
 
                                 const value = std.fmt.parseInt(usize, value_string, 10) catch {
                                     std.debug.print("[debug] invalid arguments\n", .{});
+                                    skip_debug_listening_one_time = true;
                                     continue;
                                 };
 
                                 if (register_id >= REGISTERS_COUNT) {
                                     std.debug.print("[debug] invalid arguments\n", .{});
+                                    skip_debug_listening_one_time = true;
                                     continue;
                                 }
 
                                 if (value >= NUMBER_CAP) {
                                     std.debug.print("[debug] invalid arguments\n", .{});
+                                    skip_debug_listening_one_time = true;
                                     continue;
                                 }
 
@@ -167,6 +173,7 @@ pub const Vm = struct {
                             }
 
                             std.debug.print("[debug] invalid arguments\n", .{});
+                            skip_debug_listening_one_time = true;
                         } else if (std.mem.indexOf(u8, actual_line, "breakpoint ") == 0) {
                             var arguments = std.mem.split(u8, actual_line, " ");
 
@@ -176,21 +183,25 @@ pub const Vm = struct {
                             if (address_string) |address| {
                                 const op_address = std.fmt.parseInt(usize, address, 10) catch {
                                     std.debug.print("[debug] invalid arguments\n", .{});
+                                    skip_debug_listening_one_time = true;
                                     continue;
                                 };
 
                                 if (op_address >= self.memory.len) {
                                     std.debug.print("[debug] invalid arguments\n", .{});
+                                    skip_debug_listening_one_time = true;
                                     continue;
                                 }
 
                                 try self.breakpoints.append(@intCast(op_address));
                             } else {
                                 std.debug.print("[debug] invalid arguments\n", .{});
+                                skip_debug_listening_one_time = true;
                                 continue;
                             }
                         } else {
-                            std.debug.print("[debug] unknown command {s}\n", .{actual_line});
+                            std.debug.print("[debug] unknown command \"{s}\"\n", .{actual_line});
+                            skip_debug_listening_one_time = true;
                         }
                         continue;
                     }
