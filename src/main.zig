@@ -1,7 +1,12 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const opCodes = @import("./op_codes.zig");
 const challengeLoaderModule = @import("./challenge_loader.zig");
 const vmModule = @import("./vm.zig");
+
+comptime {
+    std.debug.assert(builtin.single_threaded);
+}
 
 const ChallengeLoader = challengeLoaderModule.ChallengeLoader;
 // const InnerState = challengeLoaderModule.InnerState;
